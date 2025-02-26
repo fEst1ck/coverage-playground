@@ -1,6 +1,6 @@
-# Dummy Fuzzer
+# Dummy Fuzzer(WIP)
 
-A simple coverage-guided fuzzer for learning and testing purposes.
+A simple coverage-guided fuzzer for comparing different coverage metrics. The fuzzer should be used with programs instrumented with https://github.com/fEst1ck/path-cov-instr.
 
 ## Building
 
@@ -8,7 +8,7 @@ A simple coverage-guided fuzzer for learning and testing purposes.
 cargo build --release
 ```
 
-The fuzzer binary will be created at `target/release/dummy-fuzzer`.
+The fuzzer binary locates at `target/release/dummy-fuzzer`.
 
 ## Usage
 
