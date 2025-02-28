@@ -2,12 +2,11 @@ mod error;
 
 use std::{
     collections::VecDeque,
-    fs::{self, File, Permissions, OpenOptions},
+    fs::{self, OpenOptions},
     io::Write,
     path::PathBuf,
     process::{Command, Stdio},
     os::unix::process::ExitStatusExt,
-    os::unix::fs::{MetadataExt, PermissionsExt},
     time::{Duration, Instant},
 };
 
@@ -21,7 +20,7 @@ use crate::{
 };
 pub use error::{FuzzerError, Result};
 
-const COVERAGE_SHM_PATH: &str = "/coverage_shm";
+const COVERAGE_SHM_PATH: &str = "/tmp/coverage_shm.bin";
 const COVERAGE_SHM_SIZE: usize = 512 * 1024 * 1024; // 512MB
 
 /// Test case representation
@@ -66,11 +65,11 @@ pub struct Fuzzer {
     crashes_dir: PathBuf,    // Directory for storing crashes
     next_id: usize,          // Counter for generating unique IDs
     stats: Stats,            // Statistics tracking
+    coverage_mmap: memmap2::MmapMut,  // Add this field
 }
 
 impl Fuzzer {
-    fn create_coverage_shm() -> Result<()> {
-        // Create or truncate the file
+    fn create_coverage_shm() -> Result<memmap2::MmapMut> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -78,14 +77,12 @@ impl Fuzzer {
             .truncate(true)
             .open(COVERAGE_SHM_PATH)?;
         
-        // Set the file size to 512MB
         file.set_len(COVERAGE_SHM_SIZE as u64)?;
         
-        // Initialize with zeros
         let mut mmap = unsafe { MmapOptions::new().map_mut(&file)? };
         mmap.fill(0);
         
-        Ok(())
+        Ok(mmap)
     }
 
     pub fn new(args: Args) -> Result<Self> {
@@ -105,6 +102,10 @@ impl Fuzzer {
         fs::create_dir_all(&queue_dir)?;
         fs::create_dir_all(&crashes_dir)?;
 
+        // Create and initialize shared memory
+        info!("Creating shared memory of size {} MB...", COVERAGE_SHM_SIZE / 1024 / 1024);
+        let coverage_mmap = Self::create_coverage_shm()?;
+
         Ok(Self {
             coverage: create_coverage_metric(args.coverage_type),
             args,
@@ -114,14 +115,11 @@ impl Fuzzer {
             crashes_dir,
             next_id: 0,
             stats: Stats::new(),
+            coverage_mmap,
         })
     }
 
     pub fn run(&mut self) -> Result<()> {
-        // Create and initialize shared memory
-        info!("Creating shared memory of size {} MB...", COVERAGE_SHM_SIZE / 1024 / 1024);
-        Self::create_coverage_shm()?;
-        
         self.load_initial_seeds()?;
         self.fuzz_loop()
     }
@@ -177,13 +175,22 @@ impl Fuzzer {
         // Prepare command
         let mut cmd = Command::new(&self.args.target_cmd[0]);
         
+        // Create temp file outside the loop if we need it
+        let temp_file = if self.uses_file_input {
+            let mut temp = tempfile::NamedTempFile::new()?;
+            temp.write_all(input)?;
+            // println!("Created temp file at: {:?}", temp.path());
+            Some(temp)
+        } else {
+            None
+        };
+        
         // Add arguments, replacing @@ with temp file path if needed
         for arg in &self.args.target_cmd[1..] {
             if arg == "@@" {
-                // Create temporary file for input
-                let mut temp = tempfile::NamedTempFile::new()?;
-                temp.write_all(input).unwrap();
-                cmd.arg(temp.path());
+                if let Some(temp) = &temp_file {
+                    cmd.arg(temp.path());
+                }
             } else {
                 cmd.arg(arg);
             }
@@ -199,17 +206,9 @@ impl Fuzzer {
         // Set RUST_BACKTRACE environment variable
         cmd.env("RUST_BACKTRACE", "1");
 
-        // Read coverage data
-        let coverage_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(COVERAGE_SHM_PATH)
-            .unwrap();
-        let mut mmap = unsafe { MmapOptions::new().map_mut(&coverage_file).unwrap() };
-        // Clear the execution path by setting length to 0
-        // mmap[0..4].copy_from_slice(&0u32.to_ne_bytes());
-        if mmap.len() >= 4 {
-            mmap[0..4].copy_from_slice(&0u32.to_ne_bytes());
+        // Use the stored mapping instead of creating a new one
+        if self.coverage_mmap.len() >= 4 {
+            self.coverage_mmap[0..4].copy_from_slice(&0u32.to_ne_bytes());
         } else {
             error!("Coverage file is too short to clear execution path");
         }
@@ -252,13 +251,13 @@ impl Fuzzer {
         }
 
         let mut path = Vec::new();
-        if mmap.len() >= 4 {
-            let len = u32::from_ne_bytes(mmap[0..4].try_into().unwrap()) as usize;
+        if self.coverage_mmap.len() >= 4 {
+            let len = u32::from_ne_bytes(self.coverage_mmap[0..4].try_into().unwrap()) as usize;
             debug!("Coverage path length: {}", len);
             for i in 0..len {
                 let offset = 4 + i * 4;
                 let block_id = u32::from_ne_bytes(
-                    mmap[offset..offset + 4].try_into().unwrap()
+                    self.coverage_mmap[offset..offset + 4].try_into().unwrap()
                 );
                 path.push(block_id);
             }
