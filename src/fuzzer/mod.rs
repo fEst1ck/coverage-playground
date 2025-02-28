@@ -2,15 +2,18 @@ mod error;
 
 use std::{
     collections::VecDeque,
-    fs::{self, File},
+    fs::{self, File, Permissions, OpenOptions},
     io::Write,
     path::PathBuf,
     process::{Command, Stdio},
     os::unix::process::ExitStatusExt,
+    os::unix::fs::{MetadataExt, PermissionsExt},
+    time::{Duration, Instant},
 };
 
 use memmap2::MmapOptions;
 use rand::Rng;
+use log::{info, warn, error, debug};
 
 use crate::{
     cli::Args,
@@ -18,13 +21,40 @@ use crate::{
 };
 pub use error::{FuzzerError, Result};
 
-const COVERAGE_SHM_PATH: &str = "/tmp/coverage_shm.bin";
+const COVERAGE_SHM_PATH: &str = "/coverage_shm";
+const COVERAGE_SHM_SIZE: usize = 512 * 1024 * 1024; // 512MB
 
 /// Test case representation
 #[derive(Clone)]
 struct TestCase {
     /// Name of the file in the queue directory
     filename: String,
+}
+
+/// Statistics tracking for the fuzzing session
+#[derive(Default)]
+struct Stats {
+    total_executions: usize,
+    new_coverage_count: usize,
+    crash_count: usize,
+    start_time: Option<Instant>,
+    last_status_time: Option<Instant>,
+    level: usize,
+}
+
+impl Stats {
+    fn new() -> Self {
+        Self {
+            start_time: Some(Instant::now()),
+            ..Default::default()
+        }
+    }
+
+    fn should_update_status(&self) -> bool {
+        self.last_status_time
+            .map(|t| t.elapsed() >= Duration::from_secs(1))
+            .unwrap_or(true)
+    }
 }
 
 pub struct Fuzzer {
@@ -35,9 +65,29 @@ pub struct Fuzzer {
     queue_dir: PathBuf,      // Directory for storing queue files
     crashes_dir: PathBuf,    // Directory for storing crashes
     next_id: usize,          // Counter for generating unique IDs
+    stats: Stats,            // Statistics tracking
 }
 
 impl Fuzzer {
+    fn create_coverage_shm() -> Result<()> {
+        // Create or truncate the file
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(COVERAGE_SHM_PATH)?;
+        
+        // Set the file size to 512MB
+        file.set_len(COVERAGE_SHM_SIZE as u64)?;
+        
+        // Initialize with zeros
+        let mut mmap = unsafe { MmapOptions::new().map_mut(&file)? };
+        mmap.fill(0);
+        
+        Ok(())
+    }
+
     pub fn new(args: Args) -> Result<Self> {
         let input_marker_count = args.target_cmd.iter()
             .filter(|arg| arg.to_str().map_or(false, |s| s == "@@"))
@@ -63,10 +113,15 @@ impl Fuzzer {
             queue_dir,
             crashes_dir,
             next_id: 0,
+            stats: Stats::new(),
         })
     }
 
     pub fn run(&mut self) -> Result<()> {
+        // Create and initialize shared memory
+        info!("Creating shared memory of size {} MB...", COVERAGE_SHM_SIZE / 1024 / 1024);
+        Self::create_coverage_shm()?;
+        
         self.load_initial_seeds()?;
         self.fuzz_loop()
     }
@@ -79,11 +134,16 @@ impl Fuzzer {
         self.crashes_dir.join(filename)
     }
 
-    fn save_to_queue(&mut self, data: &[u8]) -> Result<String> {
-        let filename = format!("id:{:06}", self.next_id);
+    fn save_to_queue(&mut self, data: &[u8], new_coverage: bool) -> Result<String> {
+        let filename = if new_coverage {
+            format!("id:{:06}:+cov", self.next_id)
+        } else {
+            format!("id:{:06}", self.next_id)
+        };
         self.next_id += 1;
 
         let path = self.get_queue_path(&filename);
+        debug!("Saving to queue: {}", path.display());
         fs::write(path, data)?;
 
         Ok(filename)
@@ -93,6 +153,7 @@ impl Fuzzer {
         let filename = format!("crash:{:06},sig:{}", self.next_id, signal);
         let path = self.get_crash_path(&filename);
         fs::write(path, data)?;
+        self.stats.crash_count += 1;
         Ok(())
     }
 
@@ -107,6 +168,12 @@ impl Fuzzer {
     ///   - Whether this input triggered new coverage
     /// * `Err` if there was an error running the target or collecting coverage
     fn run_and_get_coverage(&mut self, input: &[u8]) -> Result<(Vec<u32>, bool)> {
+        self.stats.total_executions += 1;
+        if self.stats.should_update_status() {
+            self.print_status();
+            self.stats.last_status_time = Some(Instant::now());
+        }
+
         // Prepare command
         let mut cmd = Command::new(&self.args.target_cmd[0]);
         
@@ -115,7 +182,7 @@ impl Fuzzer {
             if arg == "@@" {
                 // Create temporary file for input
                 let mut temp = tempfile::NamedTempFile::new()?;
-                temp.write_all(input)?;
+                temp.write_all(input).unwrap();
                 cmd.arg(temp.path());
             } else {
                 cmd.arg(arg);
@@ -127,10 +194,34 @@ impl Fuzzer {
             cmd.stdin(Stdio::piped());
         }
         cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
+        cmd.stderr(Stdio::piped());
+
+        // Set RUST_BACKTRACE environment variable
+        cmd.env("RUST_BACKTRACE", "1");
+
+        // Read coverage data
+        let coverage_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(COVERAGE_SHM_PATH)
+            .unwrap();
+        let mut mmap = unsafe { MmapOptions::new().map_mut(&coverage_file).unwrap() };
+        // Clear the execution path by setting length to 0
+        // mmap[0..4].copy_from_slice(&0u32.to_ne_bytes());
+        if mmap.len() >= 4 {
+            mmap[0..4].copy_from_slice(&0u32.to_ne_bytes());
+        } else {
+            error!("Coverage file is too short to clear execution path");
+        }
 
         // Run the target
-        let mut child = cmd.spawn()?;
+        let mut child = match cmd.spawn() {
+            Ok(child) => child,
+            Err(e) => {
+                error!("Failed to spawn process: {}", e);
+                return Err(e.into());
+            }
+        };
         
         // Write input to stdin if not using file input
         if !self.uses_file_input {
@@ -153,82 +244,143 @@ impl Fuzzer {
                         self.save_crash(input, signal)?;
                     },
                     _ => {
-                        eprintln!("Warning: Target terminated by unhandled signal: {}", signal);
+                        warn!("Target terminated by unhandled signal: {}", signal);
                         // Continue fuzzing
                     }
                 }
             }
         }
 
-        // Read coverage data
-        let coverage_file = File::open(COVERAGE_SHM_PATH)?;
-        let mmap = unsafe { MmapOptions::new().map(&coverage_file)? };
-        
         let mut path = Vec::new();
         if mmap.len() >= 4 {
             let len = u32::from_ne_bytes(mmap[0..4].try_into().unwrap()) as usize;
-            if mmap.len() >= 4 + len * 4 {
-                for i in 0..len {
-                    let offset = 4 + i * 4;
-                    let block_id = u32::from_ne_bytes(
-                        mmap[offset..offset + 4].try_into().unwrap()
-                    );
-                    path.push(block_id);
-                }
+            debug!("Coverage path length: {}", len);
+            for i in 0..len {
+                let offset = 4 + i * 4;
+                let block_id = u32::from_ne_bytes(
+                    mmap[offset..offset + 4].try_into().unwrap()
+                );
+                path.push(block_id);
             }
+            debug!("Coverage path: {:?}", path);
         }
 
         // Check if this path triggers new coverage
         let trigger_new_cov = self.coverage.has_new_coverage(&path);
+        if trigger_new_cov {
+            self.stats.new_coverage_count += 1;
+        }
 
         Ok((path, trigger_new_cov))
     }
 
     fn mutate(&self, test_case: &TestCase) -> Result<Vec<u8>> {
         // Read the input file
+        debug!("Mutating: {}", test_case.filename);
         let input = fs::read(self.get_queue_path(&test_case.filename))?;
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let mut result = input.to_vec();
         
-        // Simple mutation strategy:
-        // 1. Pick a random byte
-        // 2. Either flip a random bit or replace with random byte
-        let pos = rng.random_range(0..result.len());
-        if rng.random_bool(0.5) {
-            // Flip a random bit
-            let bit = rng.random_range(0..8);
+        if result.len() == 0 {
+            return Ok(result)
+        }
+
+        // Choose mutation strategy:
+        // 1. Bit flip (30% chance)
+        // 2. Byte replacement (20% chance)
+        // 3. Delete consecutive bytes (25% chance)
+        // 4. Clone/insert bytes (25% chance)
+        let strategy = rng.gen_range(0..100);
+        
+        if strategy < 30 {
+            // Strategy 1: Flip a random bit
+            let pos = rng.gen_range(0..result.len());
+            let bit = rng.gen_range(0..8);
             result[pos] ^= 1 << bit;
+        } else if strategy < 50 {
+            // Strategy 2: Replace with random byte
+            let pos = rng.gen_range(0..result.len());
+            result[pos] = rng.gen();
+        } else if strategy < 75 {
+            // Strategy 3: Delete consecutive bytes
+            if result.len() > 1 {  // Only delete if we have at least 2 bytes
+                let delete_len = rng.gen_range(1..=std::cmp::min(8, result.len())); // Delete 1-8 bytes
+                let start_pos = rng.gen_range(0..=result.len() - delete_len);
+                result.drain(start_pos..start_pos + delete_len);
+            }
         } else {
-            // Replace with random byte
-            result[pos] = rng.random();
+            // Strategy 4: Clone/insert bytes
+            let chunk_len = rng.gen_range(1..=std::cmp::min(16, result.len())); // Clone/insert 1-16 bytes
+            let insert_pos = rng.gen_range(0..=result.len());
+
+            if rng.gen_bool(0.75) { // 75% chance to clone existing bytes
+                if result.len() >= chunk_len {
+                    // Pick a random source position to clone from
+                    let src_pos = rng.gen_range(0..=result.len() - chunk_len);
+                    let chunk: Vec<u8> = result[src_pos..src_pos + chunk_len].to_vec();
+                    result.splice(insert_pos..insert_pos, chunk);
+                }
+            } else { // 25% chance to insert constant bytes
+                let constant_byte = rng.gen(); // Generate a random constant byte
+                let chunk = vec![constant_byte; chunk_len];
+                result.splice(insert_pos..insert_pos, chunk);
+            }
         }
         
         Ok(result)
     }
 
-    fn fuzz_loop(&mut self) -> Result<()> {
+    fn fuzz_one_level(&mut self) -> Result<()> {
         while let Some(test_case) = self.queue.pop_front() {
-            // Keep original in queue for future mutations
-            self.queue.push_back(test_case.clone());
-
-            // Perform one mutation
+            info!("Fuzzing: {}", test_case.filename);
+            
             match self.mutate(&test_case) {
                 Ok(mutated) => {
-                    if let Ok((path, trigger_new_cov)) = self.run_and_get_coverage(&mutated) {
-                        if trigger_new_cov {
-                            // Update coverage
-                            self.coverage.update_from_path(&path);
-                            // Save to queue and add to queue
-                            let filename = self.save_to_queue(&mutated)?;
-                            self.queue.push_back(TestCase { 
-                                filename,
-                            });
+                    match self.run_and_get_coverage(&mutated) {
+                        Ok((path, trigger_new_cov)) => {
+                            let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
+                            if trigger_new_cov {
+                                self.coverage.update_from_path(&path);
+                                self.queue.push_back(TestCase { 
+                                    filename,
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            error!("Error running mutated test case from '{}': {}", test_case.filename, e);
+                            continue;
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error during mutation: {}", e);
+                    error!("Error during mutation of '{}': {}", test_case.filename, e);
                     continue;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn fuzz_loop(&mut self) -> Result<()> {
+        loop {
+            self.fuzz_one_level()?;
+            self.load_queue()?;
+            self.stats.level += 1;
+            // break Ok(());
+        }
+    }
+
+    fn load_queue(&mut self) -> Result<()> {
+        for entry in fs::read_dir(&self.queue_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() {
+                // Get just the filename component, not the full path
+                if let Some(filename) = entry.path().file_name() {
+                    if let Some(filename_str) = filename.to_str() {
+                        self.queue.push_back(TestCase {
+                            filename: filename_str.to_string(),
+                        });
+                    }
                 }
             }
         }
@@ -239,22 +391,47 @@ impl Fuzzer {
         for entry in fs::read_dir(&self.args.input_dir)? {
             let entry = entry?;
             if entry.file_type()?.is_file() {
-                let data = fs::read(entry.path())?;
-                if let Ok((path, triggers_new_cov)) = self.run_and_get_coverage(&data) {
-                    if triggers_new_cov {
-                        // Update coverage
-                        self.coverage.update_from_path(&path);
-                        // Save to queue and add to queue
-                        let filename = self.save_to_queue(&data)?;
-                        self.queue.push_back(TestCase { 
-                            filename,
-                        });
-                    } else {
-                        eprintln!("Warning: Initial test case '{}' doesn't trigger new coverage. Perhaps useless?", entry.path().display());
+                info!("Loading seed file: {}", entry.path().display());
+                let data = fs::read(entry.path()).unwrap();
+
+                match self.run_and_get_coverage(&data) {
+                    Ok((path, triggers_new_cov)) => {
+                        let filename = self.save_to_queue(&data, triggers_new_cov)?;
+                        if triggers_new_cov {
+                            self.coverage.update_from_path(&path);
+                            self.queue.push_back(TestCase { 
+                                filename,
+                            });
+                            info!("Loaded seed file: {}", entry.path().display());
+                            debug!("Path: {:?}", path);
+                        } else {
+                            warn!("Warning: Initial test case '{}' doesn't trigger new coverage. Perhaps useless?", entry.path().display());
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error running seed file '{}': {}", entry.path().display(), e);
                     }
                 }
             }
         }
         Ok(())
     }
+
+    fn print_status(&self) {
+        let elapsed = self.stats.start_time.map(|t| t.elapsed()).unwrap_or_default();
+        let hours = elapsed.as_secs() / 3600;
+        let minutes = (elapsed.as_secs() % 3600) / 60;
+        let seconds = elapsed.as_secs() % 60;
+
+        println!("\x1B[2J\x1B[1;1H"); // Clear screen and move cursor to top
+        println!("=== Fuzzer Status ===");
+        println!("Runtime: {:02}:{:02}:{:02}", hours, minutes, seconds);
+        println!("Total executions: {}", self.stats.total_executions);
+        println!("New coverage found: {}", self.stats.new_coverage_count);
+        println!("Crashes found: {}", self.stats.crash_count);
+        println!("Exec/s: {:.2}", self.stats.total_executions as f64 / elapsed.as_secs_f64());
+        println!("Queue size: {}", self.queue.len());
+        println!("Level: {}", self.stats.level);
+    }
+
 } 

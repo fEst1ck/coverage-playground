@@ -5,9 +5,11 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }  # Command line argument parsing
-rand = "0.9"                                       # Random number generation
-memmap2 = "0.9"                                   # Memory mapping for shared memory
+rand = "0.8"                                       # Random number generation
+memmap2 = "0.5"                                     # Memory mapping for shared memory
 tempfile = "3.17"                                 # Temporary file handling
 thiserror = "2.0"                                 # Error handling
 nix = "0.29"                                      # Unix APIs
 rustc-hash = "2.1.1"                              # Fast hashing
+log = "0.4"
+env_logger = "0.10"
