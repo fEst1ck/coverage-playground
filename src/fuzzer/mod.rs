@@ -473,7 +473,6 @@ impl Fuzzer {
                     Ok((path, triggers_new_cov)) => {
                         let filename = self.save_to_queue(&data, triggers_new_cov)?;
                         if triggers_new_cov {
-                            self.coverage.update_from_path(&path);
                             self.queue.push_back(TestCase { filename });
                             info!("Loaded seed file: {}", entry.path().display());
                             debug!("Path: {:?}", path);
