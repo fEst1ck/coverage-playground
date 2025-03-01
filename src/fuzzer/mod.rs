@@ -2,7 +2,7 @@ mod error;
 
 use std::{
     collections::VecDeque,
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::Write,
     os::unix::process::ExitStatusExt,
     path::PathBuf,
@@ -13,6 +13,7 @@ use std::{
 use log::{debug, error, info, warn};
 use memmap2::MmapOptions;
 use rand::Rng;
+use serde_json;
 
 use crate::{
     cli::Args,
@@ -22,6 +23,7 @@ pub use error::{FuzzerError, Result};
 
 const COVERAGE_SHM_PATH: &str = "/tmp/coverage_shm.bin";
 const COVERAGE_SHM_SIZE: usize = 512 * 1024 * 1024; // 512MB
+const LOG_INTERVAL_SECS: u64 = 30; // Log state every 30 seconds
 
 /// Test case representation
 #[derive(Clone)]
@@ -38,13 +40,16 @@ struct Stats {
     crash_count: usize,
     start_time: Option<Instant>,
     last_status_time: Option<Instant>,
+    last_log_time: Option<Instant>,
     level: usize,
 }
 
 impl Stats {
     fn new() -> Self {
+        let now = Instant::now();
         Self {
-            start_time: Some(Instant::now()),
+            start_time: Some(now),
+            last_log_time: Some(now),
             ..Default::default()
         }
     }
@@ -52,6 +57,12 @@ impl Stats {
     fn should_update_status(&self) -> bool {
         self.last_status_time
             .map(|t| t.elapsed() >= Duration::from_secs(1))
+            .unwrap_or(true)
+    }
+    
+    fn should_log_state(&self) -> bool {
+        self.last_log_time
+            .map(|t| t.elapsed() >= Duration::from_secs(LOG_INTERVAL_SECS))
             .unwrap_or(true)
     }
 }
@@ -63,6 +74,7 @@ pub struct Fuzzer {
     uses_file_input: bool,
     queue_dir: PathBuf,              // Directory for storing queue files
     crashes_dir: PathBuf,            // Directory for storing crashes
+    stats_dir: PathBuf,              // Directory for storing stats logs
     next_id: usize,                  // Counter for generating unique IDs
     stats: Stats,                    // Statistics tracking
     coverage_mmap: memmap2::MmapMut, // Add this field
@@ -102,8 +114,10 @@ impl Fuzzer {
         // Create output directory structure
         let queue_dir = args.output_dir.join("queue");
         let crashes_dir = args.output_dir.join("crashes");
+        let stats_dir = args.output_dir.join("stats");
         fs::create_dir_all(&queue_dir)?;
         fs::create_dir_all(&crashes_dir)?;
+        fs::create_dir_all(&stats_dir)?;
 
         // Create and initialize shared memory
         info!(
@@ -119,6 +133,7 @@ impl Fuzzer {
             uses_file_input,
             queue_dir,
             crashes_dir,
+            stats_dir,
             next_id: 0,
             stats: Stats::new(),
             coverage_mmap,
@@ -173,9 +188,17 @@ impl Fuzzer {
     /// * `Err` if there was an error running the target or collecting coverage
     fn run_and_get_coverage(&mut self, input: &[u8]) -> Result<(Vec<u32>, bool)> {
         self.stats.total_executions += 1;
+        
+        // Check if we should update the status display
         if self.stats.should_update_status() {
             self.print_status();
             self.stats.last_status_time = Some(Instant::now());
+        }
+        
+        // Check if we should log the state to a file
+        if self.stats.should_log_state() {
+            self.log_state_to_file()?;
+            self.stats.last_log_time = Some(Instant::now());
         }
 
         // Prepare command
@@ -437,7 +460,7 @@ impl Fuzzer {
         println!("=== Fuzzer Status ===");
         println!("Runtime: {:02}:{:02}:{:02}", hours, minutes, seconds);
         println!("Total executions: {}", self.stats.total_executions);
-        println!("New coverage found: {}", self.stats.new_coverage_count);
+        println!("Coverage count: {}", self.coverage.cov_info());
         println!("Crashes found: {}", self.stats.crash_count);
         println!(
             "Exec/s: {:.2}",
@@ -445,5 +468,125 @@ impl Fuzzer {
         );
         println!("Queue size: {}", self.queue.len());
         println!("Level: {}", self.stats.level);
+    }
+
+    // Method to log fuzzer state to a file
+    fn log_state_to_file(&self) -> Result<()> {
+        let elapsed = self
+            .stats
+            .start_time
+            .map(|t| t.elapsed())
+            .unwrap_or_default();
+        
+        // Create the JSON data structure
+        let state = serde_json::json!({
+            "runtime_seconds": elapsed.as_secs(),
+            "total_executions": self.stats.total_executions,
+            "coverage_count": self.coverage.cov_info(),
+            "crash_count": self.stats.crash_count,
+            "queue_size": self.queue.len(),
+            "level": self.stats.level,
+        });
+        
+        // Update the summary log file with the new state
+        self.update_summary_log(&state)?;
+        
+        info!("Logged fuzzer state to summary file");
+        
+        Ok(())
+    }
+    
+    // Method to update the summary log file with the latest stats
+    fn update_summary_log(&self, state: &serde_json::Value) -> Result<()> {
+        let summary_path = self.stats_dir.join("fuzzer_log.json");
+        
+        // Read existing summary or create a new array
+        let mut summary = if summary_path.exists() {
+            match fs::read_to_string(&summary_path) {
+                Ok(content) => {
+                    match serde_json::from_str::<serde_json::Value>(&content) {
+                        Ok(json) => {
+                            if let Some(array) = json.as_array() {
+                                array.clone()
+                            } else {
+                                Vec::new()
+                            }
+                        },
+                        Err(_) => Vec::new()
+                    }
+                },
+                Err(_) => Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+        
+        // Add the new state
+        summary.push(state.clone());
+        
+        // Write the updated summary back to the file
+        let mut file = File::create(&summary_path)?;
+        file.write_all(serde_json::to_string_pretty(&summary)?.as_bytes())?;
+        
+        // Generate CSV file for data analysis
+        if summary.len() >= 2 {
+            self.generate_csv_report(&summary)?;
+        }
+        
+        Ok(())
+    }
+    
+    // Generate a CSV file for easier data analysis
+    fn generate_csv_report(&self, summary: &[serde_json::Value]) -> Result<()> {
+        let csv_path = self.stats_dir.join("progress_data.csv");
+        let mut file = File::create(&csv_path)?;
+        
+        // Check if we're in advanced mode by examining the first entry's coverage_count format
+        let is_advanced_mode = summary.first()
+            .and_then(|entry| entry["coverage_count"].as_object())
+            .is_some();
+        
+        // Write CSV header based on the mode
+        if is_advanced_mode {
+            writeln!(file, "runtime_seconds,total_executions,block_coverage,edge_coverage,path_coverage,crash_count,queue_size,level")?;
+        } else {
+            writeln!(file, "runtime_seconds,total_executions,coverage_count,crash_count,queue_size,level")?;
+        }
+        
+        // Write data rows
+        for entry in summary {
+            let runtime = entry["runtime_seconds"].as_u64();
+            let execs = entry["total_executions"].as_u64();
+            let crashes = entry["crash_count"].as_u64();
+            let queue_size = entry["queue_size"].as_u64();
+            let level = entry["level"].as_u64();
+            
+            if is_advanced_mode {
+                // Handle advanced mode with JSON object coverage
+                if let Some(coverage_obj) = entry["coverage_count"].as_object() {
+                    let block_cov = coverage_obj.get("block").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let edge_cov = coverage_obj.get("edge").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let path_cov = coverage_obj.get("path").and_then(|v| v.as_u64()).unwrap_or(0);
+                    
+                    if let (Some(rt), Some(ex), Some(cr), Some(qs), Some(lv)) = 
+                        (runtime, execs, crashes, queue_size, level) {
+                        writeln!(file, "{},{},{},{},{},{},{},{}", 
+                            rt, ex, block_cov, edge_cov, path_cov, cr, qs, lv)?;
+                    }
+                }
+            } else {
+                // Handle simple mode with numeric coverage
+                let coverage = entry["coverage_count"].as_u64().unwrap_or(0);
+                
+                if let (Some(rt), Some(ex), Some(cr), Some(qs), Some(lv)) = 
+                    (runtime, execs, crashes, queue_size, level) {
+                    writeln!(file, "{},{},{},{},{},{}", 
+                        rt, ex, coverage, cr, qs, lv)?;
+                }
+            }
+        }
+        
+        info!("Generated CSV data file at {}", csv_path.display());
+        Ok(())
     }
 }
