@@ -2,6 +2,7 @@ mod all;
 mod block;
 mod edge;
 mod path;
+use all::AllCoverage;
 pub use block::BlockCoverage;
 pub use edge::EdgeCoverage;
 pub use path::PathCoverage;
@@ -11,6 +12,12 @@ pub enum CoverageType {
     Block,
     Edge,
     Path,
+}
+
+impl Default for CoverageType {
+    fn default() -> Self {
+        CoverageType::Edge
+    }
 }
 
 impl std::str::FromStr for CoverageType {
@@ -31,10 +38,14 @@ pub trait CoverageMetric {
     fn update_from_path(&mut self, path: &[u32]) -> bool;
 }
 
-pub fn create_coverage_metric(coverage_type: CoverageType) -> Box<dyn CoverageMetric> {
-    match coverage_type {
-        CoverageType::Block => Box::new(BlockCoverage::default()),
-        CoverageType::Edge => Box::new(EdgeCoverage::default()),
-        CoverageType::Path => Box::new(PathCoverage::default()),
+pub fn create_coverage_metric(coverage_type: CoverageType, all_coverage: bool) -> Box<dyn CoverageMetric> {
+    if all_coverage {
+        Box::new(AllCoverage::new(coverage_type))
+    } else {
+        match coverage_type {
+            CoverageType::Block => Box::new(BlockCoverage::default()),
+            CoverageType::Edge => Box::new(EdgeCoverage::default()),
+            CoverageType::Path => Box::new(PathCoverage::default()),
+        }
     }
 }

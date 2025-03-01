@@ -113,7 +113,7 @@ impl Fuzzer {
         let coverage_mmap = Self::create_coverage_shm()?;
 
         Ok(Self {
-            coverage: create_coverage_metric(args.coverage_type),
+            coverage: create_coverage_metric(args.coverage_type, args.all_coverage),
             args,
             queue: VecDeque::new(),
             uses_file_input,

@@ -19,6 +19,10 @@ pub struct Args {
     #[arg(short = 'c', long, default_value = "block")]
     pub coverage_type: CoverageType,
 
+    /// Enable advanced mode
+    #[arg(short = 'a', long, default_value = "false")]
+    pub all_coverage: bool,
+
     /// Target command and its arguments (after --)
     #[arg(last = true, required = true, allow_hyphen_values = false)]
     pub target_cmd: Vec<OsString>,
@@ -41,6 +45,7 @@ mod tests {
         assert!(matches!(args.coverage_type, CoverageType::Block));
         assert_eq!(args.target_cmd.len(), 1);
         assert_eq!(args.target_cmd[0].to_str().unwrap(), "target");
+        assert_eq!(args.all_coverage, false);
     }
 
     #[test]
@@ -183,5 +188,20 @@ mod tests {
 
         assert_eq!(args.input_dir.to_str().unwrap(), "./seeds");
         assert_eq!(args.output_dir.to_str().unwrap(), "../output");
+    }
+
+    #[test]
+    fn test_advanced_mode() {
+        // Test without advanced mode (default)
+        let args = parse_args(&["fuzzer", "-i", "/seeds", "-o", "/output", "--", "target"]);
+        assert_eq!(args.all_coverage, false);
+
+        // Test with advanced mode short flag
+        let args = parse_args(&["fuzzer", "-i", "/seeds", "-o", "/output", "-a", "--", "target"]);
+        assert_eq!(args.all_coverage, true);
+
+        // Test with advanced mode long flag
+        let args = parse_args(&["fuzzer", "-i", "/seeds", "-o", "/output", "--all-coverage", "--", "target"]);
+        assert_eq!(args.all_coverage, true);
     }
 }
