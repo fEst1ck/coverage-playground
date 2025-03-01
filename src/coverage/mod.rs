@@ -1,4 +1,10 @@
-use rustc_hash::FxHashSet;
+mod block;
+mod edge;
+mod path;
+
+pub use block::BlockCoverage;
+pub use edge::EdgeCoverage;
+pub use path::PathCoverage;
 
 #[derive(Debug, Clone, Copy)]
 pub enum CoverageType {
@@ -23,54 +29,6 @@ impl std::str::FromStr for CoverageType {
 pub trait CoverageMetric {
     fn update_from_path(&mut self, path: &[u32]);
     fn has_new_coverage(&self, path: &[u32]) -> bool;
-}
-
-#[derive(Default)]
-pub struct BlockCoverage {
-    blocks: FxHashSet<u32>,
-}
-
-impl CoverageMetric for BlockCoverage {
-    fn update_from_path(&mut self, path: &[u32]) {
-        self.blocks.extend(path.iter().copied());
-    }
-
-    fn has_new_coverage(&self, path: &[u32]) -> bool {
-        path.iter().any(|block| !self.blocks.contains(block))
-    }
-}
-
-#[derive(Default)]
-pub struct EdgeCoverage {
-    edges: FxHashSet<(u32, u32)>,
-}
-
-impl CoverageMetric for EdgeCoverage {
-    fn update_from_path(&mut self, path: &[u32]) {
-        for window in path.windows(2) {
-            self.edges.insert((window[0], window[1]));
-        }
-    }
-
-    fn has_new_coverage(&self, path: &[u32]) -> bool {
-        path.windows(2)
-            .any(|window| !self.edges.contains(&(window[0], window[1])))
-    }
-}
-
-#[derive(Default)]
-pub struct PathCoverage {
-    paths: FxHashSet<Vec<u32>>,
-}
-
-impl CoverageMetric for PathCoverage {
-    fn update_from_path(&mut self, path: &[u32]) {
-        self.paths.insert(path.to_vec());
-    }
-
-    fn has_new_coverage(&self, path: &[u32]) -> bool {
-        !self.paths.contains(path)
-    }
 }
 
 pub fn create_coverage_metric(coverage_type: CoverageType) -> Box<dyn CoverageMetric> {
