@@ -119,13 +119,16 @@ impl Fuzzer {
         fs::create_dir_all(&crashes_dir)?;
         fs::create_dir_all(&stats_dir)?;
 
+        // Create a note file with the fuzzing command
+        Self::create_command_note(&args)?;
+
         // Create and initialize shared memory
         info!(
             "Creating shared memory of size {} MB...",
             COVERAGE_SHM_SIZE / 1024 / 1024
         );
         let coverage_mmap = Self::create_coverage_shm()?;
-
+        
         Ok(Self {
             coverage: create_coverage_metric(args.coverage_type, args.all_coverage),
             args,
@@ -138,6 +141,51 @@ impl Fuzzer {
             stats: Stats::new(),
             coverage_mmap,
         })
+    }
+
+    // Create a note file with the fuzzing command for documentation
+    fn create_command_note(args: &Args) -> Result<()> {
+        let note_path = args.output_dir.join("command.txt");
+        let mut file = File::create(&note_path)?;
+        
+        // Reconstruct the command line
+        let mut command = String::new();
+        
+        // Add the program name (assuming it's the fuzzer binary)
+        command.push_str("./fuzzer");
+        
+        // Add coverage type
+        let coverage_type = match args.coverage_type {
+            crate::coverage::CoverageType::Block => "block",
+            crate::coverage::CoverageType::Edge => "edge",
+            crate::coverage::CoverageType::Path => "path",
+        };
+        command.push_str(&format!(" -c {}", coverage_type));
+        
+        // Add all coverage if enabled
+        if args.all_coverage {
+            command.push_str(" -a");
+        }
+        
+        // Add input and output directories
+        command.push_str(&format!(" -i {}", args.input_dir.display()));
+        command.push_str(&format!(" -o {}", args.output_dir.display()));
+        
+        // Add target command
+        command.push_str(" -- ");
+        let target_cmd_str: Vec<String> = args.target_cmd
+            .iter()
+            .map(|os_str| os_str.to_string_lossy().to_string())
+            .collect();
+        command.push_str(&target_cmd_str.join(" "));
+        
+        // Write to file
+        writeln!(file, "Fuzzing command:")?;
+        writeln!(file, "{}", command)?;
+        writeln!(file, "\nStarted at: {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"))?;
+        
+        info!("Created command note file at {}", note_path.display());
+        Ok(())
     }
 
     pub fn run(&mut self) -> Result<()> {
