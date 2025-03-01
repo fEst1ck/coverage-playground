@@ -1,5 +1,5 @@
 use crate::coverage::{BlockCoverage, CoverageMetric, EdgeCoverage, PathCoverage, CoverageType};
-use serde_json;
+use serde_json::{self, Value};
 
 #[derive(Default)]
 pub struct AllCoverage {
@@ -33,11 +33,11 @@ impl CoverageMetric for AllCoverage {
 		}
     }
 
-	fn cov_info(&self) -> String {
+	fn cov_info(&self) -> Value {
         serde_json::json!({
             "block": self.block_coverage.cov_info(),
             "edge": self.edge_coverage.cov_info(),
             "path": self.path_coverage.cov_info(),
-        }).to_string()
+        })
 	}
 }
