@@ -265,7 +265,7 @@ impl Fuzzer {
         }
 
         // Check if this path triggers new coverage
-        let trigger_new_cov = self.coverage.has_new_coverage(&path);
+        let trigger_new_cov = self.coverage.update_from_path(&path);
         if trigger_new_cov {
             self.stats.new_coverage_count += 1;
         }
@@ -336,10 +336,9 @@ impl Fuzzer {
             match self.mutate(&test_case) {
                 Ok(mutated) => {
                     match self.run_and_get_coverage(&mutated) {
-                        Ok((path, trigger_new_cov)) => {
+                        Ok((_path, trigger_new_cov)) => {
                             let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
                             if trigger_new_cov {
-                                self.coverage.update_from_path(&path);
                                 self.queue.push_back(TestCase { 
                                     filename,
                                 });
