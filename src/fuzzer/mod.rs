@@ -371,7 +371,6 @@ impl Fuzzer {
             self.fuzz_one_level()?;
             self.load_queue()?;
             self.stats.level += 1;
-            // break Ok(());
         }
     }
 
