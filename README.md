@@ -1,6 +1,6 @@
-# Dummy Fuzzer(WIP)
+# Dummy Fuzzer
 
-A simple coverage-guided fuzzer designed for comparing different coverage metrics, i.e., block coverage, edge coverage, and path coverage. Thus performance of the fuzzer is not our concern.
+A simple coverage-guided fuzzer designed for comparing different coverage metrics: block coverage, edge coverage, and path coverage. Our fuzzer can track all three coverages at the same time, and uses one of them to guide the fuzzing process. Our goal is to compare the effectiveness of different coverage metrics, and so performance of the fuzzer is not our concern.
 
 The fuzzer should be used with programs instrumented with https://github.com/fEst1ck/path-cov-instr, which tracks the execution paths of a program.
 
