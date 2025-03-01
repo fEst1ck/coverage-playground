@@ -415,8 +415,8 @@ impl Fuzzer {
             match self.mutate(&test_case) {
                 Ok(mutated) => match self.run_and_get_coverage(&mutated) {
                     Ok((_path, trigger_new_cov)) => {
-                        let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
                         if trigger_new_cov {
+                            let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
                             self.queue.push_back(TestCase { filename });
                         }
                     }
@@ -471,8 +471,8 @@ impl Fuzzer {
 
                 match self.run_and_get_coverage(&data) {
                     Ok((path, triggers_new_cov)) => {
-                        let filename = self.save_to_queue(&data, triggers_new_cov)?;
                         if triggers_new_cov {
+                            let filename = self.save_to_queue(&data, triggers_new_cov)?;
                             self.queue.push_back(TestCase { filename });
                             info!("Loaded seed file: {}", entry.path().display());
                             debug!("Path: {:?}", path);
