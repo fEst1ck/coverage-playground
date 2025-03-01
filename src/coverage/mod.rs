@@ -36,6 +36,10 @@ impl std::str::FromStr for CoverageType {
 pub trait CoverageMetric {
     // Update coverage with the given path and return true if new coverage was found
     fn update_from_path(&mut self, path: &[u32]) -> bool;
+
+    fn cov_info(&self) -> String {
+        String::new()
+    }
 }
 
 pub fn create_coverage_metric(coverage_type: CoverageType, all_coverage: bool) -> Box<dyn CoverageMetric> {

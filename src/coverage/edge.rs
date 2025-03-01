@@ -17,4 +17,8 @@ impl CoverageMetric for EdgeCoverage {
 
         new_coverage
     }
+
+	fn cov_info(&self) -> String {
+		self.edges.len().to_string()
+	}
 }

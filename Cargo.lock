@@ -207,6 +207,8 @@ dependencies = [
  "path-reduction",
  "rand",
  "rustc-hash",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
 ]

@@ -36,4 +36,8 @@ impl CoverageMetric for PathCoverage {
         // Return true if this is a new path
         self.paths.insert(path_hash)
     }
+
+	fn cov_info(&self) -> String {
+		self.paths.len().to_string()
+	}
 }

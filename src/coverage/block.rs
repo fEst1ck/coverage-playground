@@ -16,4 +16,8 @@ impl CoverageMetric for BlockCoverage {
 
         new_coverage
     }
+
+	fn cov_info(&self) -> String {
+		self.blocks.len().to_string()
+	}
 }
