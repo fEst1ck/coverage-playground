@@ -4,19 +4,19 @@ use std::{
     collections::VecDeque,
     fs::{self, OpenOptions},
     io::Write,
+    os::unix::process::ExitStatusExt,
     path::PathBuf,
     process::{Command, Stdio},
-    os::unix::process::ExitStatusExt,
     time::{Duration, Instant},
 };
 
+use log::{debug, error, info, warn};
 use memmap2::MmapOptions;
 use rand::Rng;
-use log::{info, warn, error, debug};
 
 use crate::{
     cli::Args,
-    coverage::{CoverageMetric, create_coverage_metric},
+    coverage::{create_coverage_metric, CoverageMetric},
 };
 pub use error::{FuzzerError, Result};
 
@@ -61,11 +61,11 @@ pub struct Fuzzer {
     queue: VecDeque<TestCase>,
     coverage: Box<dyn CoverageMetric>,
     uses_file_input: bool,
-    queue_dir: PathBuf,      // Directory for storing queue files
-    crashes_dir: PathBuf,    // Directory for storing crashes
-    next_id: usize,          // Counter for generating unique IDs
-    stats: Stats,            // Statistics tracking
-    coverage_mmap: memmap2::MmapMut,  // Add this field
+    queue_dir: PathBuf,              // Directory for storing queue files
+    crashes_dir: PathBuf,            // Directory for storing crashes
+    next_id: usize,                  // Counter for generating unique IDs
+    stats: Stats,                    // Statistics tracking
+    coverage_mmap: memmap2::MmapMut, // Add this field
 }
 
 impl Fuzzer {
@@ -76,22 +76,25 @@ impl Fuzzer {
             .create(true)
             .truncate(true)
             .open(COVERAGE_SHM_PATH)?;
-        
+
         file.set_len(COVERAGE_SHM_SIZE as u64)?;
-        
+
         let mut mmap = unsafe { MmapOptions::new().map_mut(&file)? };
         mmap.fill(0);
-        
+
         Ok(mmap)
     }
 
     pub fn new(args: Args) -> Result<Self> {
-        let input_marker_count = args.target_cmd.iter()
+        let input_marker_count = args
+            .target_cmd
+            .iter()
             .filter(|arg| arg.to_str().map_or(false, |s| s == "@@"))
             .count();
         if input_marker_count > 1 {
             return Err(FuzzerError::Configuration(
-                "Multiple @@ markers found in command line. Only one marker is supported.".to_string()
+                "Multiple @@ markers found in command line. Only one marker is supported."
+                    .to_string(),
             ));
         }
         let uses_file_input = input_marker_count > 0;
@@ -103,7 +106,10 @@ impl Fuzzer {
         fs::create_dir_all(&crashes_dir)?;
 
         // Create and initialize shared memory
-        info!("Creating shared memory of size {} MB...", COVERAGE_SHM_SIZE / 1024 / 1024);
+        info!(
+            "Creating shared memory of size {} MB...",
+            COVERAGE_SHM_SIZE / 1024 / 1024
+        );
         let coverage_mmap = Self::create_coverage_shm()?;
 
         Ok(Self {
@@ -156,7 +162,7 @@ impl Fuzzer {
     }
 
     /// Runs the target program with the given input and collects coverage information
-    /// 
+    ///
     /// # Arguments
     /// * `input` - The input data to feed to the target program
     ///
@@ -174,7 +180,7 @@ impl Fuzzer {
 
         // Prepare command
         let mut cmd = Command::new(&self.args.target_cmd[0]);
-        
+
         // Create temp file outside the loop if we need it
         let temp_file = if self.uses_file_input {
             let mut temp = tempfile::NamedTempFile::new()?;
@@ -184,7 +190,7 @@ impl Fuzzer {
         } else {
             None
         };
-        
+
         // Add arguments, replacing @@ with temp file path if needed
         for arg in &self.args.target_cmd[1..] {
             if arg == "@@" {
@@ -221,7 +227,7 @@ impl Fuzzer {
                 return Err(e.into());
             }
         };
-        
+
         // Write input to stdin if not using file input
         if !self.uses_file_input {
             if let Some(mut stdin) = child.stdin.take() {
@@ -241,7 +247,7 @@ impl Fuzzer {
                         _crashed = true;
                         // Save crash
                         self.save_crash(input, signal)?;
-                    },
+                    }
                     _ => {
                         warn!("Target terminated by unhandled signal: {}", signal);
                         // Continue fuzzing
@@ -256,9 +262,8 @@ impl Fuzzer {
             debug!("Coverage path length: {}", len);
             for i in 0..len {
                 let offset = 4 + i * 4;
-                let block_id = u32::from_ne_bytes(
-                    self.coverage_mmap[offset..offset + 4].try_into().unwrap()
-                );
+                let block_id =
+                    u32::from_ne_bytes(self.coverage_mmap[offset..offset + 4].try_into().unwrap());
                 path.push(block_id);
             }
             debug!("Coverage path: {:?}", path);
@@ -279,9 +284,9 @@ impl Fuzzer {
         let input = fs::read(self.get_queue_path(&test_case.filename))?;
         let mut rng = rand::thread_rng();
         let mut result = input.to_vec();
-        
+
         if result.len() == 0 {
-            return Ok(result)
+            return Ok(result);
         }
 
         // Choose mutation strategy:
@@ -290,7 +295,7 @@ impl Fuzzer {
         // 3. Delete consecutive bytes (25% chance)
         // 4. Clone/insert bytes (25% chance)
         let strategy = rng.gen_range(0..100);
-        
+
         if strategy < 30 {
             // Strategy 1: Flip a random bit
             let pos = rng.gen_range(0..result.len());
@@ -302,7 +307,8 @@ impl Fuzzer {
             result[pos] = rng.gen();
         } else if strategy < 75 {
             // Strategy 3: Delete consecutive bytes
-            if result.len() > 1 {  // Only delete if we have at least 2 bytes
+            if result.len() > 1 {
+                // Only delete if we have at least 2 bytes
                 let delete_len = rng.gen_range(1..=std::cmp::min(8, result.len())); // Delete 1-8 bytes
                 let start_pos = rng.gen_range(0..=result.len() - delete_len);
                 result.drain(start_pos..start_pos + delete_len);
@@ -312,44 +318,45 @@ impl Fuzzer {
             let chunk_len = rng.gen_range(1..=std::cmp::min(16, result.len())); // Clone/insert 1-16 bytes
             let insert_pos = rng.gen_range(0..=result.len());
 
-            if rng.gen_bool(0.75) { // 75% chance to clone existing bytes
+            if rng.gen_bool(0.75) {
+                // 75% chance to clone existing bytes
                 if result.len() >= chunk_len {
                     // Pick a random source position to clone from
                     let src_pos = rng.gen_range(0..=result.len() - chunk_len);
                     let chunk: Vec<u8> = result[src_pos..src_pos + chunk_len].to_vec();
                     result.splice(insert_pos..insert_pos, chunk);
                 }
-            } else { // 25% chance to insert constant bytes
+            } else {
+                // 25% chance to insert constant bytes
                 let constant_byte = rng.gen(); // Generate a random constant byte
                 let chunk = vec![constant_byte; chunk_len];
                 result.splice(insert_pos..insert_pos, chunk);
             }
         }
-        
+
         Ok(result)
     }
 
     fn fuzz_one_level(&mut self) -> Result<()> {
         while let Some(test_case) = self.queue.pop_front() {
             info!("Fuzzing: {}", test_case.filename);
-            
+
             match self.mutate(&test_case) {
-                Ok(mutated) => {
-                    match self.run_and_get_coverage(&mutated) {
-                        Ok((_path, trigger_new_cov)) => {
-                            let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
-                            if trigger_new_cov {
-                                self.queue.push_back(TestCase { 
-                                    filename,
-                                });
-                            }
-                        }
-                        Err(e) => {
-                            error!("Error running mutated test case from '{}': {}", test_case.filename, e);
-                            continue;
+                Ok(mutated) => match self.run_and_get_coverage(&mutated) {
+                    Ok((_path, trigger_new_cov)) => {
+                        let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
+                        if trigger_new_cov {
+                            self.queue.push_back(TestCase { filename });
                         }
                     }
-                }
+                    Err(e) => {
+                        error!(
+                            "Error running mutated test case from '{}': {}",
+                            test_case.filename, e
+                        );
+                        continue;
+                    }
+                },
                 Err(e) => {
                     error!("Error during mutation of '{}': {}", test_case.filename, e);
                     continue;
@@ -397,9 +404,7 @@ impl Fuzzer {
                         let filename = self.save_to_queue(&data, triggers_new_cov)?;
                         if triggers_new_cov {
                             self.coverage.update_from_path(&path);
-                            self.queue.push_back(TestCase { 
-                                filename,
-                            });
+                            self.queue.push_back(TestCase { filename });
                             info!("Loaded seed file: {}", entry.path().display());
                             debug!("Path: {:?}", path);
                         } else {
@@ -407,7 +412,11 @@ impl Fuzzer {
                         }
                     }
                     Err(e) => {
-                        error!("Error running seed file '{}': {}", entry.path().display(), e);
+                        error!(
+                            "Error running seed file '{}': {}",
+                            entry.path().display(),
+                            e
+                        );
                     }
                 }
             }
@@ -416,7 +425,11 @@ impl Fuzzer {
     }
 
     fn print_status(&self) {
-        let elapsed = self.stats.start_time.map(|t| t.elapsed()).unwrap_or_default();
+        let elapsed = self
+            .stats
+            .start_time
+            .map(|t| t.elapsed())
+            .unwrap_or_default();
         let hours = elapsed.as_secs() / 3600;
         let minutes = (elapsed.as_secs() % 3600) / 60;
         let seconds = elapsed.as_secs() % 60;
@@ -427,9 +440,11 @@ impl Fuzzer {
         println!("Total executions: {}", self.stats.total_executions);
         println!("New coverage found: {}", self.stats.new_coverage_count);
         println!("Crashes found: {}", self.stats.crash_count);
-        println!("Exec/s: {:.2}", self.stats.total_executions as f64 / elapsed.as_secs_f64());
+        println!(
+            "Exec/s: {:.2}",
+            self.stats.total_executions as f64 / elapsed.as_secs_f64()
+        );
         println!("Queue size: {}", self.queue.len());
         println!("Level: {}", self.stats.level);
     }
-
-} 
+}

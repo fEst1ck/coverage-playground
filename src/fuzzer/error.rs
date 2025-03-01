@@ -1,14 +1,14 @@
-use thiserror::Error;
 use std::io;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum FuzzerError {
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
-    
+
     #[error("Failed to run target: {0}")]
     TargetExecution(String),
-    
+
     #[error("Invalid coverage data: {0}")]
     InvalidCoverage(String),
 
@@ -16,4 +16,4 @@ pub enum FuzzerError {
     Configuration(String),
 }
 
-pub type Result<T> = std::result::Result<T, FuzzerError>; 
+pub type Result<T> = std::result::Result<T, FuzzerError>;

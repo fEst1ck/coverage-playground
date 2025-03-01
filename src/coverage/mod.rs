@@ -1,7 +1,7 @@
+mod all;
 mod block;
 mod edge;
 mod path;
-
 pub use block::BlockCoverage;
 pub use edge::EdgeCoverage;
 pub use path::PathCoverage;
@@ -37,4 +37,4 @@ pub fn create_coverage_metric(coverage_type: CoverageType) -> Box<dyn CoverageMe
         CoverageType::Edge => Box::new(EdgeCoverage::default()),
         CoverageType::Path => Box::new(PathCoverage::default()),
     }
-} 
+}

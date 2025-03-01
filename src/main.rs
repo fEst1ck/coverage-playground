@@ -1,15 +1,15 @@
 use clap::Parser;
 use dummy_fuzzer::{Args, Fuzzer};
-use std::process;
-use log::error;
 use env_logger;
+use log::error;
+use std::process;
 
 fn main() {
     // Initialize the logger
     env_logger::init();
 
     let args = Args::parse();
-    
+
     if args.target_cmd.is_empty() {
         error!("No target command specified");
         process::exit(1);
