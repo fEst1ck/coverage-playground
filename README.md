@@ -1,8 +1,10 @@
 # Dummy Fuzzer(WIP)
 
-A simple coverage-guided fuzzer for comparing different coverage metrics. The fuzzer should be used with programs instrumented with https://github.com/fEst1ck/path-cov-instr.
+A simple coverage-guided fuzzer designed for comparing different coverage metrics, i.e., block coverage, edge coverage, and path coverage. Thus performance of the fuzzer is not our concern.
 
-## Building
+The fuzzer should be used with programs instrumented with https://github.com/fEst1ck/path-cov-instr, which tracks the execution paths of a program.
+
+## Build
 
 ```bash
 cargo build --release
@@ -12,16 +14,19 @@ The fuzzer binary locates at `target/release/dummy-fuzzer`.
 
 ## Usage
 
+The usage is similar to AFL(++):
+
 ```bash
-./dummy-fuzzer -i <input_seeds_dir> -o <output_dir> [-c <coverage_type>] -- <target_program> [target_args...]
+./dummy-fuzzer -i <input_seeds_dir> -o <output_dir> [-c <coverage_type>] [-a] -- <target_program> [target_args...]
 ```
 
-### Arguments
+### Options
 
 - `-i, --input-dir <DIR>`: Directory containing initial seed files
 - `-o, --output-dir <DIR>`: Output directory where findings will be saved
 - `-c, --coverage-type <TYPE>`: Coverage type to use (default: "block")
   - Supported types: "block", "edge", "path"
+- `-a, --all-coverage`: Enable tracking of all coverage types simultaneously
 - `-- <target_program> [args...]`: Target program and its arguments
 
 ### Input Modes
@@ -40,10 +45,31 @@ The fuzzer supports two modes of providing input to the target program:
 
 ### Output Structure
 
-The fuzzer creates two directories under the specified output directory:
+The fuzzer creates the following directories under the specified output directory:
 
 - `queue/`: Contains test cases that trigger new coverage
 - `crashes/`: Contains inputs that caused the target to crash
+- `stats/`: Contains logging information and statistics
+
+Additionally, the fuzzer creates:
+- `command.txt`: Records the exact command used to start the fuzzer and the start time
+
+### Logging and Statistics
+
+The fuzzer automatically logs its state every 30 seconds to provide insights into the fuzzing progress:
+
+- `stats/fuzzer_log.json`: Contains detailed state information at each logging interval
+- `stats/progress_data.csv`: CSV file for easy data analysis and visualization
+
+The logged information includes:
+- Runtime duration
+- Total executions
+- Coverage count (varies based on coverage type)
+- Crash count
+- Queue size
+- Current fuzzing level
+
+When using the `-a` (all-coverage) flag, the coverage information includes separate counts for block, edge, and path coverage.
 
 ### Example
 
@@ -55,11 +81,14 @@ The fuzzer creates two directories under the specified output directory:
 
 2. Run the fuzzer:
    ```bash
-   # For a program that reads from file
-   ./dummy-fuzzer -i seeds/ -o output/ -- ./target -f @@
+   # For a program that reads from file with block coverage
+   ./dummy-fuzzer -i seeds/ -o output/ -c block -- ./target -f @@
 
-   # For a program that reads from stdin
-   ./dummy-fuzzer -i seeds/ -o output/ -- ./target
+   # For a program that reads from stdin with path coverage
+   ./dummy-fuzzer -i seeds/ -o output/ -c path -- ./target
+   
+   # For a program with all coverage types enabled
+   ./dummy-fuzzer -i seeds/ -o output/ -a -- ./target -f @@
    ```
 
 ### Crash Detection
@@ -73,8 +102,10 @@ Other signals are logged but don't trigger crash saving.
 
 ## Development
 
-The fuzzer uses a simple mutation strategy:
-1. Pick a random byte
-2. Either flip a random bit or replace with a random byte
+The fuzzer uses multiple mutation strategies:
+1. Bit flip (30% chance)
+2. Byte replacement (20% chance)
+3. Delete consecutive bytes (25% chance)
+4. Clone/insert bytes (25% chance)
 
-Coverage is tracked using shared memory at `/tmp/coverage_shm.bin`. 
+Coverage, i.e., execution path, is tracked using shared memory at `/tmp/coverage_shm.bin`. 
