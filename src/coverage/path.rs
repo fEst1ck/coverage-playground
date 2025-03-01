@@ -2,6 +2,7 @@ use super::CoverageMetric;
 use md5::{compute, Digest};
 use path_reduction::path_reduction::PathReducer;
 use rustc_hash::FxHashSet;
+use serde_json::Value;
 
 pub struct PathCoverage {
     paths: FxHashSet<Digest>,
@@ -37,7 +38,7 @@ impl CoverageMetric for PathCoverage {
         self.paths.insert(path_hash)
     }
 
-	fn cov_info(&self) -> String {
-		self.paths.len().to_string()
+	fn cov_info(&self) -> Value {
+		Value::Number(self.paths.len().into())
 	}
 }

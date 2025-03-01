@@ -1,5 +1,6 @@
 use super::CoverageMetric;
 use rustc_hash::FxHashSet;
+use serde_json::Value;
 
 #[derive(Default)]
 pub struct BlockCoverage {
@@ -17,7 +18,7 @@ impl CoverageMetric for BlockCoverage {
         new_coverage
     }
 
-	fn cov_info(&self) -> String {
-		self.blocks.len().to_string()
+	fn cov_info(&self) -> Value {
+		Value::Number(self.blocks.len().into())
 	}
 }
