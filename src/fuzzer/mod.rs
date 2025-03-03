@@ -321,6 +321,8 @@ impl Fuzzer {
             }
         }
 
+        temp_file.close()?;
+
         let mut path = Vec::new();
         if self.coverage_mmap.len() >= 4 {
             let len = u32::from_ne_bytes(self.coverage_mmap[0..4].try_into().unwrap()) as usize;
