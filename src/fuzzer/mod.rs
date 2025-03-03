@@ -271,8 +271,8 @@ impl Fuzzer {
         if !self.uses_file_input {
             cmd.stdin(Stdio::from(tmp_file));
         }
-        cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
 
         // Set RUST_BACKTRACE environment variable
         cmd.env("RUST_BACKTRACE", "1");
@@ -301,11 +301,21 @@ impl Fuzzer {
         }
 
         // Wait for completion
-        let status = child.wait()?;
+        let output = child.wait_with_output()?;
+        
+        // Print the command output
+        if !output.stdout.is_empty() {
+            println!("Command stdout:\n{}", String::from_utf8_lossy(&output.stdout));
+        }
+        
+        if !output.stderr.is_empty() {
+            println!("Command stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+        }
+        
         let mut _crashed = false;
-        if !status.success() {
+        if !output.status.success() {
             // Check if process was terminated by a signal (crash)
-            if let Some(signal) = status.signal() {
+            if let Some(signal) = output.status.signal() {
                 // SIGSEGV = 11, SIGABRT = 6, SIGBUS = 7
                 match signal {
                     11 | 6 | 7 => {
