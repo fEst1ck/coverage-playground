@@ -278,7 +278,7 @@ impl Fuzzer {
             cmd.stdin(Stdio::piped());
         }
         cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::piped());
+        cmd.stderr(Stdio::null());
 
         // Set RUST_BACKTRACE environment variable
         cmd.env("RUST_BACKTRACE", "1");
