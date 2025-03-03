@@ -253,29 +253,23 @@ impl Fuzzer {
         let mut cmd = Command::new(&self.args.target_cmd[0]);
 
         // Create temp file outside the loop if we need it
-        let temp_file = if self.uses_file_input {
-            let mut temp = tempfile::NamedTempFile::new()?;
-            temp.write_all(input)?;
-            // println!("Created temp file at: {:?}", temp.path());
-            Some(temp)
-        } else {
-            None
-        };
+        let mut temp_file = tempfile::NamedTempFile::new()?;
+        temp_file.write_all(input)?;
 
         // Add arguments, replacing @@ with temp file path if needed
         for arg in &self.args.target_cmd[1..] {
             if arg == "@@" {
-                if let Some(temp) = &temp_file {
-                    cmd.arg(temp.path());
-                }
+                cmd.arg(temp_file.path());
             } else {
                 cmd.arg(arg);
             }
         }
 
+        let tmp_file = File::open(temp_file.path())?;
+
         // Configure stdio
         if !self.uses_file_input {
-            cmd.stdin(Stdio::piped());
+            cmd.stdin(Stdio::from(tmp_file));
         }
         cmd.stdout(Stdio::null());
         cmd.stderr(Stdio::null());
