@@ -325,7 +325,7 @@ impl Fuzzer {
         if self.coverage_mmap.len() >= 4 {
             let len = u32::from_ne_bytes(self.coverage_mmap[0..4].try_into().unwrap()) as usize;
             debug!("Coverage path length: {}", len);
-            for i in 0..len {
+            for i in 0..len.min(self.coverage_mmap.len() / 4 - 1) {
                 let offset = 4 + i * 4;
                 let block_id =
                     u32::from_ne_bytes(self.coverage_mmap[offset..offset + 4].try_into().unwrap());
