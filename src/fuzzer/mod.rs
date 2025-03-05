@@ -513,6 +513,7 @@ impl Fuzzer {
         println!("=== Fuzzer Status ===");
         println!("Runtime: {:02}:{:02}:{:02}", hours, minutes, seconds);
         println!("Total executions: {}", self.stats.total_executions);
+        println!("New coverage count: {}", self.stats.new_coverage_count);
         println!("Coverage count: {}", self.coverage.cov_info());
         println!("Crashes found: {}", self.stats.crash_count);
         println!(
