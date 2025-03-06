@@ -143,7 +143,8 @@ impl Fuzzer {
         })
     }
 
-    // Create a note file with the fuzzing command for documentation
+    /// Create a file recording the command used to run the fuzzer at
+    /// `output_dir/command.txt`.
     fn create_command_note(args: &Args) -> Result<()> {
         let note_path = args.output_dir.join("command.txt");
         let mut file = File::create(&note_path)?;
