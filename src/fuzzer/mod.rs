@@ -1,3 +1,5 @@
+//! Module for the fuzzer
+
 mod error;
 
 use std::{
@@ -68,19 +70,30 @@ impl Stats {
 }
 
 pub struct Fuzzer {
+    /// Command line arguments
     args: Args,
+    /// Queue of test cases
     queue: VecDeque<TestCase>,
+    /// Coverage metric
     coverage: Box<dyn CoverageMetric>,
+    /// Whether the target program uses file input
     uses_file_input: bool,
-    queue_dir: PathBuf,              // Directory for storing queue files
-    crashes_dir: PathBuf,            // Directory for storing crashes
-    stats_dir: PathBuf,              // Directory for storing stats logs
-    next_id: usize,                  // Counter for generating unique IDs
-    stats: Stats,                    // Statistics tracking
-    coverage_mmap: memmap2::MmapMut, // Add this field
+    /// Directory for storing queue files
+    queue_dir: PathBuf,
+    /// Directory for storing crashes
+    crashes_dir: PathBuf,
+    /// Directory for storing stats logs
+    stats_dir: PathBuf,
+    /// Counter for generating unique test case IDs
+    next_id: usize,
+    /// Fuzzer statistics
+    stats: Stats,
+    /// Shared memory for coverage metric
+    coverage_mmap: memmap2::MmapMut,
 }
 
 impl Fuzzer {
+    /// Create a shared memory for path coverage instrumentation
     fn create_coverage_shm() -> Result<memmap2::MmapMut> {
         let file = OpenOptions::new()
             .read(true)
@@ -189,6 +202,7 @@ impl Fuzzer {
         Ok(())
     }
 
+    /// Run the fuzzer
     pub fn run(&mut self) -> Result<()> {
         self.load_initial_seeds()?;
         self.fuzz_loop()
@@ -356,6 +370,7 @@ impl Fuzzer {
         Ok((path, trigger_new_cov))
     }
 
+    /// Mutate a test case
     fn mutate(&self, test_case: &TestCase) -> Result<Vec<u8>> {
         // Read the input file
         debug!("Mutating: {}", test_case.filename);
@@ -415,6 +430,7 @@ impl Fuzzer {
         Ok(result)
     }
 
+    /// Fuzz until the queue is empty
     fn fuzz_one_level(&mut self) -> Result<()> {
         while let Some(test_case) = self.queue.pop_front() {
             info!("Fuzzing: {}", test_case.filename);
@@ -444,6 +460,7 @@ impl Fuzzer {
         Ok(())
     }
 
+    /// The main fuzzing loop
     fn fuzz_loop(&mut self) -> Result<()> {
         loop {
             self.fuzz_one_level()?;
@@ -452,6 +469,7 @@ impl Fuzzer {
         }
     }
 
+    /// Load the queue from the queue directory
     fn load_queue(&mut self) -> Result<()> {
         for entry in fs::read_dir(&self.queue_dir)? {
             let entry = entry?;
@@ -469,6 +487,7 @@ impl Fuzzer {
         Ok(())
     }
 
+    /// Load initial seeds from the input directory
     fn load_initial_seeds(&mut self) -> Result<()> {
         for entry in fs::read_dir(&self.args.input_dir)? {
             let entry = entry?;
@@ -500,6 +519,7 @@ impl Fuzzer {
         Ok(())
     }
 
+    /// Print the fuzzer status to the screen
     fn print_status(&self) {
         let elapsed = self
             .stats
@@ -525,7 +545,7 @@ impl Fuzzer {
         println!("Level: {}", self.stats.level);
     }
 
-    // Method to log fuzzer state to a file
+    /// Log the fuzzer state to a file
     fn log_state_to_file(&self) -> Result<()> {
         let elapsed = self
             .stats
@@ -551,7 +571,7 @@ impl Fuzzer {
         Ok(())
     }
     
-    // Method to update the summary log file with the latest stats
+    /// Update the summary log file with the latest stats
     fn update_summary_log(&self, state: &serde_json::Value) -> Result<()> {
         let summary_path = self.stats_dir.join("fuzzer_log.json");
         
