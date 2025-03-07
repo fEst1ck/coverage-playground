@@ -41,4 +41,8 @@ impl CoverageMetric for PathCoverage {
 	fn cov_info(&self) -> Value {
 		Value::Number(self.paths.len().into())
 	}
+
+    fn name(&self) -> String {
+        String::from("path")
+    }
 }

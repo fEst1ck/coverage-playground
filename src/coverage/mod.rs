@@ -39,6 +39,10 @@ pub trait CoverageMetric {
     fn update_from_path(&mut self, path: &[u32]) -> bool;
 
     fn cov_info(&self) -> Value;
+
+    fn name(&self) -> String {
+        String::new()
+    }
 }
 
 pub fn create_coverage_metric(coverage_type: CoverageType, all_coverage: bool) -> Box<dyn CoverageMetric> {
