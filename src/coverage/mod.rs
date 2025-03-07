@@ -35,11 +35,13 @@ impl std::str::FromStr for CoverageType {
 }
 
 pub trait CoverageMetric {
-    // Update coverage with the given path and return true if new coverage was found
+    /// Update coverage with the given path and return true if new coverage was found
     fn update_from_path(&mut self, path: &[u32]) -> bool;
 
+    /// Get the coverage information
     fn cov_info(&self) -> Value;
 
+    /// Get the name of the metric
     fn name(&self) -> String {
         String::new()
     }
