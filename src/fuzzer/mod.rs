@@ -2,7 +2,7 @@
 // Stuff to look at:
 // `fuzz_loop`: the main loop of the fuzzer
 // `mutate`: implements the mutation strategy
-// `track_fuzzing_progress`: writes the fuzzer states to log file(s)
+// `log_fuzzing_progress`: writes the fuzzer states to log file(s)
 mod error;
 
 use std::{
@@ -376,7 +376,7 @@ impl Fuzzer {
         }
 
         self.update_status_screen();
-        self.track_fuzzing_progress()?;
+        self.log_fuzzing_progress()?;
 
         let cov_feedback = self.coverage.update_from_path(&path);
 
@@ -567,9 +567,9 @@ impl Fuzzer {
         println!("Level: {}", self.stats.level);
     }
 
-    /// Track the fuzzing progress by
+    /// Log the fuzzing progress by
     /// writing the fuzzer states from time to time to log file(s)
-    fn track_fuzzing_progress(&mut self) -> Result<()> {
+    fn log_fuzzing_progress(&mut self) -> Result<()> {
         if self.stats.should_log_state() {
             self.log_state_to_file()?;
             self.stats.last_log_time = Some(Instant::now());
