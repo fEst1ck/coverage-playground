@@ -38,9 +38,9 @@ impl CoverageMetric for PathCoverage {
         self.paths.insert(path_hash)
     }
 
-	fn cov_info(&self) -> Value {
-		Value::Number(self.paths.len().into())
-	}
+    fn cov_info(&self) -> Value {
+        Value::Number(self.paths.len().into())
+    }
 
     fn name(&self) -> &str {
         "path"

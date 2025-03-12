@@ -19,7 +19,9 @@ use serde_json;
 
 use crate::{
     cli::Args,
-    coverage::{get_coverage_metric_by_name, CoverageFeedback, CoverageMetric, CoverageMetricAggregator},
+    coverage::{
+        get_coverage_metric_by_name, CoverageFeedback, CoverageMetric, CoverageMetricAggregator,
+    },
 };
 pub use error::{FuzzerError, Result};
 
@@ -132,7 +134,10 @@ impl Fuzzer {
         let coverage_metrics: Vec<Box<dyn CoverageMetric>> = args
             .coverage_types
             .iter()
-            .map(|t| get_coverage_metric_by_name(t).expect(format!("Invalid metric '{}' not found", t).as_str()))
+            .map(|t| {
+                get_coverage_metric_by_name(t)
+                    .expect(format!("Invalid metric '{}' not found", t).as_str())
+            })
             .collect();
 
         let coverage_metric_aggregator = CoverageMetricAggregator::new(coverage_metrics);
@@ -173,39 +178,44 @@ impl Fuzzer {
     fn create_command_note(args: &Args) -> Result<()> {
         let note_path = args.output_dir.join("command.txt");
         let mut file = File::create(&note_path)?;
-        
+
         // Reconstruct the command line
         let mut command = String::new();
-        
+
         // Add the program name (assuming it's the fuzzer binary)
         command.push_str("./fuzzer");
-        
+
         // Add coverage type
         let coverage_metrics = &args.coverage_types;
         command.push_str(&format!(" -c {}", coverage_metrics.join(", ")));
-        
+
         // Add all coverage if enabled
         if args.all_coverage {
             command.push_str(" -a");
         }
-        
+
         // Add input and output directories
         command.push_str(&format!(" -i {}", args.input_dir.display()));
         command.push_str(&format!(" -o {}", args.output_dir.display()));
-        
+
         // Add target command
         command.push_str(" -- ");
-        let target_cmd_str: Vec<String> = args.target_cmd
+        let target_cmd_str: Vec<String> = args
+            .target_cmd
             .iter()
             .map(|os_str| os_str.to_string_lossy().to_string())
             .collect();
         command.push_str(&target_cmd_str.join(" "));
-        
+
         // Write to file
         writeln!(file, "Fuzzing command:")?;
         writeln!(file, "{}", command)?;
-        writeln!(file, "\nStarted at: {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"))?;
-        
+        writeln!(
+            file,
+            "\nStarted at: {}",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        )?;
+
         info!("Created command note file at {}", note_path.display());
         Ok(())
     }
@@ -312,16 +322,22 @@ impl Fuzzer {
 
         // Wait for completion
         let output = child.wait_with_output()?;
-        
+
         // Print the command output
         if !output.stdout.is_empty() {
-            println!("Command stdout:\n{}", String::from_utf8_lossy(&output.stdout));
+            println!(
+                "Command stdout:\n{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
         }
-        
+
         if !output.stderr.is_empty() {
-            println!("Command stderr:\n{}", String::from_utf8_lossy(&output.stderr));
+            println!(
+                "Command stderr:\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
-        
+
         let mut _crashed = false;
         if !output.status.success() {
             // Check if process was terminated by a signal (crash)
@@ -565,7 +581,7 @@ impl Fuzzer {
             .start_time
             .map(|t| t.elapsed())
             .unwrap_or_default();
-        
+
         // Create the JSON data structure
         let state = serde_json::json!({
             "runtime_seconds": elapsed.as_secs(),
@@ -575,72 +591,74 @@ impl Fuzzer {
             "queue_size": self.queue.len(),
             "level": self.stats.level,
         });
-        
+
         // Update the summary log file with the new state
         self.update_summary_log(&state)?;
-        
+
         info!("Logged fuzzer state to summary file");
-        
+
         Ok(())
     }
-    
+
     /// Update the summary log file with the latest stats
     fn update_summary_log(&self, state: &serde_json::Value) -> Result<()> {
         let summary_path = self.stats_dir.join("fuzzer_log.json");
-        
+
         // Read existing summary or create a new array
         let mut summary = if summary_path.exists() {
             match fs::read_to_string(&summary_path) {
-                Ok(content) => {
-                    match serde_json::from_str::<serde_json::Value>(&content) {
-                        Ok(json) => {
-                            if let Some(array) = json.as_array() {
-                                array.clone()
-                            } else {
-                                Vec::new()
-                            }
-                        },
-                        Err(_) => Vec::new()
+                Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                    Ok(json) => {
+                        if let Some(array) = json.as_array() {
+                            array.clone()
+                        } else {
+                            Vec::new()
+                        }
                     }
+                    Err(_) => Vec::new(),
                 },
-                Err(_) => Vec::new()
+                Err(_) => Vec::new(),
             }
         } else {
             Vec::new()
         };
-        
+
         // Add the new state
         summary.push(state.clone());
-        
+
         // Write the updated summary back to the file
         let mut file = File::create(&summary_path)?;
         file.write_all(serde_json::to_string_pretty(&summary)?.as_bytes())?;
-        
+
         // Generate CSV file for data analysis
         if summary.len() >= 2 {
             self.generate_csv_report(&summary)?;
         }
-        
+
         Ok(())
     }
-    
+
     // Generate a CSV file for easier data analysis
     fn generate_csv_report(&self, summary: &[serde_json::Value]) -> Result<()> {
         let csv_path = self.stats_dir.join("progress_data.csv");
         let mut file = File::create(&csv_path)?;
-        
+
         // Check if we're in advanced mode by examining the first entry's coverage_count format
-        let is_advanced_mode = summary.first()
+        let is_advanced_mode = summary
+            .first()
             .and_then(|entry| entry["coverage_count"].as_object())
             .is_some();
-        
+
         // Write CSV header based on the mode
         if is_advanced_mode {
             writeln!(file, "runtime_seconds,total_executions,block_coverage,edge_coverage,path_coverage,crash_count,queue_size,level")?;
         } else {
-            writeln!(file, "runtime_seconds,total_executions,coverage_count,crash_count,queue_size,level")?;
+            writeln!(
+                file,
+                "runtime_seconds,total_executions,coverage_count,crash_count,queue_size,level"
+            )?;
         }
-        
+
         // Write data rows
         for entry in summary {
             let runtime = entry["runtime_seconds"].as_u64();
@@ -648,32 +666,45 @@ impl Fuzzer {
             let crashes = entry["crash_count"].as_u64();
             let queue_size = entry["queue_size"].as_u64();
             let level = entry["level"].as_u64();
-            
+
             if is_advanced_mode {
                 // Handle advanced mode with JSON object coverage
                 if let Some(coverage_obj) = entry["coverage_count"].as_object() {
-                    let block_cov = coverage_obj.get("block").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let edge_cov = coverage_obj.get("edge").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let path_cov = coverage_obj.get("path").and_then(|v| v.as_u64()).unwrap_or(0);
-                    
-                    if let (Some(rt), Some(ex), Some(cr), Some(qs), Some(lv)) = 
-                        (runtime, execs, crashes, queue_size, level) {
-                        writeln!(file, "{},{},{},{},{},{},{},{}", 
-                            rt, ex, block_cov, edge_cov, path_cov, cr, qs, lv)?;
+                    let block_cov = coverage_obj
+                        .get("block")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let edge_cov = coverage_obj
+                        .get("edge")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let path_cov = coverage_obj
+                        .get("path")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+
+                    if let (Some(rt), Some(ex), Some(cr), Some(qs), Some(lv)) =
+                        (runtime, execs, crashes, queue_size, level)
+                    {
+                        writeln!(
+                            file,
+                            "{},{},{},{},{},{},{},{}",
+                            rt, ex, block_cov, edge_cov, path_cov, cr, qs, lv
+                        )?;
                     }
                 }
             } else {
                 // Handle simple mode with numeric coverage
                 let coverage = entry["coverage_count"].as_u64().unwrap_or(0);
-                
-                if let (Some(rt), Some(ex), Some(cr), Some(qs), Some(lv)) = 
-                    (runtime, execs, crashes, queue_size, level) {
-                    writeln!(file, "{},{},{},{},{},{}", 
-                        rt, ex, coverage, cr, qs, lv)?;
+
+                if let (Some(rt), Some(ex), Some(cr), Some(qs), Some(lv)) =
+                    (runtime, execs, crashes, queue_size, level)
+                {
+                    writeln!(file, "{},{},{},{},{},{}", rt, ex, coverage, cr, qs, lv)?;
                 }
             }
         }
-        
+
         info!("Generated CSV data file at {}", csv_path.display());
         Ok(())
     }

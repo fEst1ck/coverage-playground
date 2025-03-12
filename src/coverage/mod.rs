@@ -49,7 +49,10 @@ pub trait CoverageMetric {
     }
 }
 
-pub fn create_coverage_metric(coverage_type: CoverageType, all_coverage: bool) -> Box<dyn CoverageMetric> {
+pub fn create_coverage_metric(
+    coverage_type: CoverageType,
+    all_coverage: bool,
+) -> Box<dyn CoverageMetric> {
     if all_coverage {
         Box::new(AllCoverage::new(coverage_type))
     } else {

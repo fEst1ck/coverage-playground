@@ -19,9 +19,9 @@ impl CoverageMetric for EdgeCoverage {
         new_coverage
     }
 
-	fn cov_info(&self) -> Value {
-		Value::Number(self.edges.len().into())
-	}
+    fn cov_info(&self) -> Value {
+        Value::Number(self.edges.len().into())
+    }
 
     fn name(&self) -> &str {
         "edge"

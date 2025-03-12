@@ -110,22 +110,41 @@ mod tests {
 
         // Test multiple coverage types
         let args = parse_args(&[
-            "fuzzer", "-i", "/seeds", "-o", "/out", "-c", "block,edge,path", "--", "target",
+            "fuzzer",
+            "-i",
+            "/seeds",
+            "-o",
+            "/out",
+            "-c",
+            "block,edge,path",
+            "--",
+            "target",
         ]);
-        assert_eq!(args.coverage_types, vec![
-            String::from("block"),
-            String::from("edge"),
-            String::from("path")
-        ]);
+        assert_eq!(
+            args.coverage_types,
+            vec![
+                String::from("block"),
+                String::from("edge"),
+                String::from("path")
+            ]
+        );
 
         // Test subset of coverage types
         let args = parse_args(&[
-            "fuzzer", "-i", "/seeds", "-o", "/out", "-c", "block,path", "--", "target",
+            "fuzzer",
+            "-i",
+            "/seeds",
+            "-o",
+            "/out",
+            "-c",
+            "block,path",
+            "--",
+            "target",
         ]);
-        assert_eq!(args.coverage_types, vec![
-            String::from("block"),
-            String::from("path")
-        ]);
+        assert_eq!(
+            args.coverage_types,
+            vec![String::from("block"), String::from("path")]
+        );
     }
 
     #[test]
@@ -217,11 +236,22 @@ mod tests {
         assert_eq!(args.all_coverage, false);
 
         // Test with advanced mode short flag
-        let args = parse_args(&["fuzzer", "-i", "/seeds", "-o", "/output", "-a", "--", "target"]);
+        let args = parse_args(&[
+            "fuzzer", "-i", "/seeds", "-o", "/output", "-a", "--", "target",
+        ]);
         assert_eq!(args.all_coverage, true);
 
         // Test with advanced mode long flag
-        let args = parse_args(&["fuzzer", "-i", "/seeds", "-o", "/output", "--all-coverage", "--", "target"]);
+        let args = parse_args(&[
+            "fuzzer",
+            "-i",
+            "/seeds",
+            "-o",
+            "/output",
+            "--all-coverage",
+            "--",
+            "target",
+        ]);
         assert_eq!(args.all_coverage, true);
     }
 }

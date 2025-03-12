@@ -18,9 +18,9 @@ impl CoverageMetric for BlockCoverage {
         new_coverage
     }
 
-	fn cov_info(&self) -> Value {
-		Value::Number(self.blocks.len().into())
-	}
+    fn cov_info(&self) -> Value {
+        Value::Number(self.blocks.len().into())
+    }
 
     fn name(&self) -> &str {
         "block"
