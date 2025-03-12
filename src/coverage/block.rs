@@ -22,7 +22,7 @@ impl CoverageMetric for BlockCoverage {
 		Value::Number(self.blocks.len().into())
 	}
 
-    fn name(&self) -> String {
-        String::from("block")
+    fn name(&self) -> &str {
+        "block"
     }
 }

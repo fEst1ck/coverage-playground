@@ -42,8 +42,8 @@ pub trait CoverageMetric {
     fn cov_info(&self) -> Value;
 
     /// Get the name of the metric
-    fn name(&self) -> String {
-        String::new()
+    fn name(&self) -> &str {
+        ""
     }
 }
 
