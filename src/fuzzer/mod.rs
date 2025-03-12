@@ -1,5 +1,8 @@
 //! Module for the fuzzer
-
+// Stuff to look at:
+// `fuzz_loop`: the main loop of the fuzzer
+// `mutate`: implements the mutation strategy
+// `track_fuzzing_progress`: writes the fuzzer states to log file(s)
 mod error;
 
 use std::{

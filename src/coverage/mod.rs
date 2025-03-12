@@ -1,3 +1,8 @@
+//！ This module implements the coverage metrics
+// Stuff to look at:
+// `CoverageMetric` trait, and its implementations
+// `CoverageMetricAggregator` struct
+
 mod block;
 mod edge;
 mod path;
