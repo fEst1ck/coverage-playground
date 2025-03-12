@@ -19,7 +19,7 @@ use serde_json;
 
 use crate::{
     cli::Args,
-    coverage::{create_coverage_metric, CoverageMetric},
+    coverage::{get_coverage_metric_by_name, CoverageFeedback, CoverageMetric, CoverageMetricAggregator},
 };
 pub use error::{FuzzerError, Result};
 
@@ -56,12 +56,16 @@ impl Stats {
         }
     }
 
+    /// Check if we should update the status display
+    /// That is, if the last status update was more than 1 second ago
     fn should_update_status(&self) -> bool {
         self.last_status_time
             .map(|t| t.elapsed() >= Duration::from_secs(1))
             .unwrap_or(true)
     }
-    
+
+    /// Check if we should log the state to a file
+    /// That is, if the last log was more than LOG_INTERVAL_SECS seconds ago
     fn should_log_state(&self) -> bool {
         self.last_log_time
             .map(|t| t.elapsed() >= Duration::from_secs(LOG_INTERVAL_SECS))
@@ -75,7 +79,7 @@ pub struct Fuzzer {
     /// Queue of test cases
     queue: VecDeque<TestCase>,
     /// Coverage metric
-    coverage: Box<dyn CoverageMetric>,
+    coverage: CoverageMetricAggregator,
     /// Whether the target program uses file input
     uses_file_input: bool,
     /// Directory for storing queue files
@@ -93,23 +97,6 @@ pub struct Fuzzer {
 }
 
 impl Fuzzer {
-    /// Create a shared memory for path coverage instrumentation
-    fn create_coverage_shm() -> Result<memmap2::MmapMut> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(COVERAGE_SHM_PATH)?;
-
-        file.set_len(COVERAGE_SHM_SIZE as u64)?;
-
-        let mut mmap = unsafe { MmapOptions::new().map_mut(&file)? };
-        mmap.fill(0);
-
-        Ok(mmap)
-    }
-
     pub fn new(args: Args) -> Result<Self> {
         let input_marker_count = args
             .target_cmd
@@ -141,9 +128,17 @@ impl Fuzzer {
             COVERAGE_SHM_SIZE / 1024 / 1024
         );
         let coverage_mmap = Self::create_coverage_shm()?;
-        
+
+        let coverage_metrics: Vec<Box<dyn CoverageMetric>> = args
+            .coverage_types
+            .iter()
+            .map(|t| get_coverage_metric_by_name(t).expect(format!("Invalid metric '{}' not found", t).as_str()))
+            .collect();
+
+        let coverage_metric_aggregator = CoverageMetricAggregator::new(coverage_metrics);
+
         Ok(Self {
-            coverage: create_coverage_metric(args.coverage_type, args.all_coverage),
+            coverage: coverage_metric_aggregator,
             args,
             queue: VecDeque::new(),
             uses_file_input,
@@ -154,6 +149,23 @@ impl Fuzzer {
             stats: Stats::new(),
             coverage_mmap,
         })
+    }
+
+    /// Create a shared memory for path coverage instrumentation
+    fn create_coverage_shm() -> Result<memmap2::MmapMut> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(COVERAGE_SHM_PATH)?;
+
+        file.set_len(COVERAGE_SHM_SIZE as u64)?;
+
+        let mut mmap = unsafe { MmapOptions::new().map_mut(&file)? };
+        mmap.fill(0);
+
+        Ok(mmap)
     }
 
     /// Create a file recording the command used to run the fuzzer at
@@ -169,12 +181,8 @@ impl Fuzzer {
         command.push_str("./fuzzer");
         
         // Add coverage type
-        let coverage_type = match args.coverage_type {
-            crate::coverage::CoverageType::Block => "block",
-            crate::coverage::CoverageType::Edge => "edge",
-            crate::coverage::CoverageType::Path => "path",
-        };
-        command.push_str(&format!(" -c {}", coverage_type));
+        let coverage_metrics = &args.coverage_types;
+        command.push_str(&format!(" -c {}", coverage_metrics.join(", ")));
         
         // Add all coverage if enabled
         if args.all_coverage {
@@ -245,24 +253,11 @@ impl Fuzzer {
     /// * `input` - The input data to feed to the target program
     ///
     /// # Returns
-    /// * `Ok((Vec<u32>, bool))` containing:
-    ///   - The execution path (block IDs) taken during execution
-    ///   - Whether this input triggered new coverage
+    ///   - The execution path taken during execution
+    ///   - Coverage feedback
     /// * `Err` if there was an error running the target or collecting coverage
-    fn run_and_get_coverage(&mut self, input: &[u8]) -> Result<(Vec<u32>, bool)> {
+    fn run_and_get_coverage(&mut self, input: &[u8]) -> Result<(Vec<u32>, CoverageFeedback)> {
         self.stats.total_executions += 1;
-        
-        // Check if we should update the status display
-        if self.stats.should_update_status() {
-            self.print_status();
-            self.stats.last_status_time = Some(Instant::now());
-        }
-        
-        // Check if we should log the state to a file
-        if self.stats.should_log_state() {
-            self.log_state_to_file()?;
-            self.stats.last_log_time = Some(Instant::now());
-        }
 
         // Prepare command
         let mut cmd = Command::new(&self.args.target_cmd[0]);
@@ -361,13 +356,12 @@ impl Fuzzer {
             debug!("Coverage path: {:?}", path);
         }
 
-        // Check if this path triggers new coverage
-        let trigger_new_cov = self.coverage.update_from_path(&path);
-        if trigger_new_cov {
-            self.stats.new_coverage_count += 1;
-        }
+        self.update_status_screen();
+        self.track_fuzzing_progress()?;
 
-        Ok((path, trigger_new_cov))
+        let cov_feedback = self.coverage.update_from_path(&path);
+
+        Ok((path, cov_feedback))
     }
 
     /// Mutate a test case
@@ -437,7 +431,8 @@ impl Fuzzer {
 
             match self.mutate(&test_case) {
                 Ok(mutated) => match self.run_and_get_coverage(&mutated) {
-                    Ok((_path, trigger_new_cov)) => {
+                    Ok((_path, cov_feedback)) => {
+                        let trigger_new_cov = cov_feedback.values().any(|&v| v);
                         if trigger_new_cov {
                             let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
                             self.queue.push_back(TestCase { filename });
@@ -496,7 +491,8 @@ impl Fuzzer {
                 let data = fs::read(entry.path()).unwrap();
 
                 match self.run_and_get_coverage(&data) {
-                    Ok((path, triggers_new_cov)) => {
+                    Ok((path, cov_feedback)) => {
+                        let triggers_new_cov = cov_feedback.values().any(|&v| v);
                         if triggers_new_cov {
                             let filename = self.save_to_queue(&data, triggers_new_cov)?;
                             self.queue.push_back(TestCase { filename });
@@ -517,6 +513,13 @@ impl Fuzzer {
             }
         }
         Ok(())
+    }
+
+    fn update_status_screen(&mut self) {
+        if self.stats.should_update_status() {
+            self.print_status();
+            self.stats.last_status_time = Some(Instant::now());
+        }
     }
 
     /// Print the fuzzer status to the screen
@@ -543,6 +546,16 @@ impl Fuzzer {
         );
         println!("Queue size: {}", self.queue.len());
         println!("Level: {}", self.stats.level);
+    }
+
+    /// Track the fuzzing progress by
+    /// writing the fuzzer states from time to time to log file(s)
+    fn track_fuzzing_progress(&mut self) -> Result<()> {
+        if self.stats.should_log_state() {
+            self.log_state_to_file()?;
+            self.stats.last_log_time = Some(Instant::now());
+        }
+        Ok(())
     }
 
     /// Log the fuzzer state to a file

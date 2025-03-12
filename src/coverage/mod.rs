@@ -71,6 +71,8 @@ pub fn get_coverage_metric_by_name(name: &str) -> Option<Box<dyn CoverageMetric>
     }
 }
 
+pub type CoverageFeedback<'a> = BTreeMap<&'a str, bool>;
+
 /// Track multiple coverage metrics simultaneously
 #[derive(Default)]
 pub struct CoverageMetricAggregator {
@@ -82,7 +84,7 @@ impl CoverageMetricAggregator {
         Self { metrics }
     }
 
-    pub fn update_from_path(&mut self, path: &[u32]) -> BTreeMap<&str, bool> {
+    pub fn update_from_path(&mut self, path: &[u32]) -> CoverageFeedback {
         let mut results = BTreeMap::new();
 
         for metric in &mut self.metrics {
