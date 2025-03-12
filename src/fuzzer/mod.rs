@@ -325,14 +325,14 @@ impl Fuzzer {
 
         // Print the command output
         if !output.stdout.is_empty() {
-            println!(
+            debug!(
                 "Command stdout:\n{}",
                 String::from_utf8_lossy(&output.stdout)
             );
         }
 
         if !output.stderr.is_empty() {
-            println!(
+            debug!(
                 "Command stderr:\n{}",
                 String::from_utf8_lossy(&output.stderr)
             );
