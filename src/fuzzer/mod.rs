@@ -469,6 +469,7 @@ impl Fuzzer {
                         let trigger_new_cov = self.summarize_coverage(&cov_feedback);
                         if trigger_new_cov {
                             let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
+                            self.stats.new_coverage_count += 1;
                             self.queue.push_back(TestCase { filename });
                         }
                     }
@@ -529,6 +530,7 @@ impl Fuzzer {
                         let triggers_new_cov = self.summarize_coverage(&cov_feedback);
                         if triggers_new_cov {
                             let filename = self.save_to_queue(&data, triggers_new_cov)?;
+                            self.stats.new_coverage_count += 1;
                             self.queue.push_back(TestCase { filename });
                             info!("Loaded seed file: {}", entry.path().display());
                             debug!("Path: {:?}", path);
