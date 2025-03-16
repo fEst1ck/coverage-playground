@@ -20,6 +20,10 @@ pub trait CoverageMetric {
     /// Get the coverage information
     fn cov_info(&self) -> Value;
 
+    fn full_cov(&self) -> Value {
+        Value::Null
+    }
+
     /// Get the name of the metric
     fn name(&self) -> &'static str {
         ""
