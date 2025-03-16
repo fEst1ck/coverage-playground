@@ -388,16 +388,14 @@ impl Fuzzer {
     }
 
     fn summarize_coverage(&self, cov: &CoverageFeedback) -> bool {
-        let mut triggers_new_cov = false;
         for (metric_name, &new_cov) in cov.iter() {
             if self.args.use_coverage.contains(&metric_name.to_string()) {
                 if new_cov {
-                    triggers_new_cov = true;
-                    break;
+                    return true;
                 }
             }
         }
-        triggers_new_cov
+        false
     }
 
     /// Mutate a test case
