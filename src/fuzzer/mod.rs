@@ -664,7 +664,7 @@ impl Fuzzer {
             let queue_size = entry["queue_size"].as_u64();
             let level = entry["level"].as_u64();
 
-            if is_all {
+            if self.args.all_coverage {
                 // Handle advanced mode with JSON object coverage
                 if let Some(coverage_obj) = entry["coverage_count"].as_object() {
                     let block_cov = coverage_obj

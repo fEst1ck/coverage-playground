@@ -2,6 +2,13 @@ use anyhow::Result;
 use clap::Parser;
 use std::{ffi::OsString, path::PathBuf};
 
+fn validate_coverage_type(s: &str) -> Result<String, String> {
+    match s {
+        "block" | "edge" | "path" => Ok(s.to_string()),
+        _ => Err(format!("Invalid coverage type: {}", s)),
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 #[command(trailing_var_arg = false)]
@@ -18,6 +25,10 @@ pub struct Args {
     /// Coverage types to use (comma-separated: block, edge, path)
     #[arg(short = 'c', long, default_value = "block", value_delimiter = ',')]
     pub coverage_types: Vec<String>,
+
+    /// Coverage types to use (comma-separated: block, edge, path)
+    #[arg(short = 'u', long, default_value = "block", value_delimiter = ',', value_parser = validate_coverage_type)]
+    pub use_coverage: Vec<String>,
 
     /// Enable advanced mode
     #[arg(short = 'a', long, default_value = "false")]
@@ -253,5 +264,92 @@ mod tests {
             "target",
         ]);
         assert_eq!(args.all_coverage, true);
+    }
+
+    #[test]
+    fn test_use_coverage_types() {
+        // Test block coverage (default)
+        let args = parse_args(&["fuzzer", "-i", "/seeds", "-o", "/out", "--", "target"]);
+        assert_eq!(args.use_coverage, vec![String::from("block")]);
+
+        // Test edge coverage
+        let args = parse_args(&[
+            "fuzzer", "-i", "/seeds", "-o", "/out", "-u", "edge", "--", "target",
+        ]);
+        assert_eq!(args.use_coverage, vec![String::from("edge")]);
+
+        // Test path coverage
+        let args = parse_args(&[
+            "fuzzer", "-i", "/seeds", "-o", "/out", "-u", "path", "--", "target",
+        ]);
+        assert_eq!(args.use_coverage, vec![String::from("path")]);
+
+        // Test multiple coverage types
+        let args = parse_args(&[
+            "fuzzer", "-i", "/seeds", "-o", "/out", "-u", "block,edge,path", "--", "target",
+        ]);
+        assert_eq!(args.use_coverage, vec![
+            String::from("block"),
+            String::from("edge"),
+            String::from("path")
+        ]);
+
+        // Test subset of coverage types
+        let args = parse_args(&[
+            "fuzzer", "-i", "/seeds", "-o", "/out", "-u", "block,path", "--", "target",
+        ]);
+        assert_eq!(args.use_coverage, vec![
+            String::from("block"),
+            String::from("path")
+        ]);
+    }
+
+    #[test]
+    fn test_coverage_and_use_coverage_combination() {
+        // Test different values for coverage and use_coverage
+        let args = parse_args(&[
+            "fuzzer", "-i", "/seeds", "-o", "/out",
+            "-c", "block,edge,path",
+            "-u", "edge,path",
+            "--", "target",
+        ]);
+        assert_eq!(args.coverage_types, vec![
+            String::from("block"),
+            String::from("edge"),
+            String::from("path")
+        ]);
+        assert_eq!(args.use_coverage, vec![
+            String::from("edge"),
+            String::from("path")
+        ]);
+
+        // Test when they're the same
+        let args = parse_args(&[
+            "fuzzer", "-i", "/seeds", "-o", "/out",
+            "-c", "block,path",
+            "-u", "block,path",
+            "--", "target",
+        ]);
+        assert_eq!(args.coverage_types, args.use_coverage);
+        assert_eq!(args.coverage_types, vec![
+            String::from("block"),
+            String::from("path")
+        ]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_use_coverage_type() {
+        parse_args(&[
+            "fuzzer", "-i", "/seeds", "-o", "/output", "-u", "invalid", "--", "target",
+        ]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_use_coverage_type_in_list() {
+        parse_args(&[
+            "fuzzer", "-i", "/seeds", "-o", "/output", "-u", "block,invalid,path", "--", "target",
+        ]);
     }
 }
