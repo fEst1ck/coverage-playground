@@ -468,17 +468,7 @@ impl Fuzzer {
             match self.mutate(&test_case) {
                 Ok(mutated) => match self.run_and_get_coverage(&mutated) {
                     Ok((_path, cov_feedback)) => {
-                        let trigger_new_cov = {
-                            let mut res = false;
-                            for (metric_name, &new_cov) in cov_feedback.clone().iter() {
-                                if self.args.use_coverage.contains(&metric_name.to_string()) {
-                                    if new_cov {
-                                        res = true;
-                                    }
-                                }
-                            }
-                            res
-                        };
+                        let trigger_new_cov = self.summarize_coverage(&cov_feedback);
                         if trigger_new_cov {
                             let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
                             self.queue.push_back(TestCase { filename });
@@ -538,7 +528,7 @@ impl Fuzzer {
 
                 match self.run_and_get_coverage(&data) {
                     Ok((path, cov_feedback)) => {
-                        let triggers_new_cov = cov_feedback.values().any(|&v| v);
+                        let triggers_new_cov = self.summarize_coverage(&cov_feedback);
                         if triggers_new_cov {
                             let filename = self.save_to_queue(&data, triggers_new_cov)?;
                             self.queue.push_back(TestCase { filename });
