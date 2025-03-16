@@ -654,9 +654,9 @@ impl Fuzzer {
         file.write_all(serde_json::to_string_pretty(&summary)?.as_bytes())?;
 
         // Generate CSV file for data analysis
-        if summary.len() >= 2 {
-            self.generate_csv_report(&summary)?;
-        }
+        // if summary.len() >= 2 {
+        //     self.generate_csv_report(&summary)?;
+        // }
 
         Ok(())
     }
