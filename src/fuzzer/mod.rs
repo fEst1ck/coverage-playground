@@ -646,14 +646,8 @@ impl Fuzzer {
         let csv_path = self.stats_dir.join("progress_data.csv");
         let mut file = File::create(&csv_path)?;
 
-        // Check if we're in advanced mode by examining the first entry's coverage_count format
-        let is_advanced_mode = summary
-            .first()
-            .and_then(|entry| entry["coverage_count"].as_object())
-            .is_some();
-
         // Write CSV header based on the mode
-        if is_advanced_mode {
+        if self.args.all_coverage {
             writeln!(file, "runtime_seconds,total_executions,block_coverage,edge_coverage,path_coverage,crash_count,queue_size,level")?;
         } else {
             writeln!(
@@ -670,7 +664,7 @@ impl Fuzzer {
             let queue_size = entry["queue_size"].as_u64();
             let level = entry["level"].as_u64();
 
-            if is_advanced_mode {
+            if is_all {
                 // Handle advanced mode with JSON object coverage
                 if let Some(coverage_obj) = entry["coverage_count"].as_object() {
                     let block_cov = coverage_obj
