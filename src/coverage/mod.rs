@@ -71,4 +71,15 @@ impl CoverageMetricAggregator {
         }
         Value::Object(info)
     }
+
+    pub fn full_cov(&self) -> BTreeMap<&'static str, Value> {
+        let mut full_covs = BTreeMap::new();
+        for metric in &self.metrics {
+            let full_cov = metric.full_cov();
+            if !full_cov.is_null() {
+                full_covs.insert(metric.name(), full_cov);
+            }
+        }
+        full_covs
+    }
 }
