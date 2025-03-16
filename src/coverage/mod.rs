@@ -21,7 +21,7 @@ pub trait CoverageMetric {
     fn cov_info(&self) -> Value;
 
     /// Get the name of the metric
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         ""
     }
 }
@@ -49,7 +49,7 @@ impl CoverageMetricAggregator {
         Self { metrics }
     }
 
-    pub fn update_from_path(&mut self, path: &[u32]) -> CoverageFeedback {
+    pub fn update_from_path(&mut self, path: &[u32]) -> CoverageFeedback<'static> {
         let mut results = BTreeMap::new();
 
         for metric in &mut self.metrics {

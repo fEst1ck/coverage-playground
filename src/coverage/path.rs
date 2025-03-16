@@ -42,7 +42,7 @@ impl CoverageMetric for PathCoverage {
         Value::Number(self.paths.len().into())
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "path"
     }
 }

@@ -192,6 +192,10 @@ impl Fuzzer {
         let coverage_metrics = &args.coverage_types;
         command.push_str(&format!(" -c {}", coverage_metrics.join(", ")));
 
+        // Add use coverage type
+        let use_coverage_metrics = &args.use_coverage;
+        command.push_str(&format!(" -u {}", use_coverage_metrics.join(", ")));
+
         // Add all coverage if enabled
         if args.all_coverage {
             command.push_str(" -a");
@@ -269,7 +273,7 @@ impl Fuzzer {
     ///   - The execution path taken during execution
     ///   - Coverage feedback
     /// * `Err` if there was an error running the target or collecting coverage
-    fn run_and_get_coverage(&mut self, input: &[u8]) -> Result<(Vec<u32>, CoverageFeedback)> {
+    fn run_and_get_coverage(&mut self, input: &[u8]) -> Result<(Vec<u32>, CoverageFeedback<'static>)> {
         self.stats.total_executions += 1;
 
         // Prepare command
@@ -383,6 +387,19 @@ impl Fuzzer {
         Ok((path, cov_feedback))
     }
 
+    fn summarize_coverage(&self, cov: &CoverageFeedback) -> bool {
+        let mut triggers_new_cov = false;
+        for (metric_name, &new_cov) in cov.iter() {
+            if self.args.use_coverage.contains(&metric_name.to_string()) {
+                if new_cov {
+                    triggers_new_cov = true;
+                    break;
+                }
+            }
+        }
+        triggers_new_cov
+    }
+
     /// Mutate a test case
     fn mutate(&self, test_case: &TestCase) -> Result<Vec<u8>> {
         // Read the input file
@@ -451,7 +468,17 @@ impl Fuzzer {
             match self.mutate(&test_case) {
                 Ok(mutated) => match self.run_and_get_coverage(&mutated) {
                     Ok((_path, cov_feedback)) => {
-                        let trigger_new_cov = cov_feedback.values().any(|&v| v);
+                        let trigger_new_cov = {
+                            let mut res = false;
+                            for (metric_name, &new_cov) in cov_feedback.clone().iter() {
+                                if self.args.use_coverage.contains(&metric_name.to_string()) {
+                                    if new_cov {
+                                        res = true;
+                                    }
+                                }
+                            }
+                            res
+                        };
                         if trigger_new_cov {
                             let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
                             self.queue.push_back(TestCase { filename });

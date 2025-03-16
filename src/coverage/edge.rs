@@ -23,7 +23,7 @@ impl CoverageMetric for EdgeCoverage {
         Value::Number(self.edges.len().into())
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "edge"
     }
 }
