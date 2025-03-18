@@ -17,7 +17,7 @@ The fuzzer binary locates at `target/release/dummy-fuzzer`.
 The usage is similar to AFL(++):
 
 ```bash
-./dummy-fuzzer -i <input_seeds_dir> -o <output_dir> [-c <coverage_type>] [-a] -- <target_program> [target_args...]
+./dummy-fuzzer -i <input_seeds_dir> -o <output_dir> [-c <METRICS>] [-u <METRICS>] -- <target_program> [target_args...]
 ```
 
 ### Options
@@ -58,17 +58,15 @@ Additionally, the fuzzer creates:
 The fuzzer automatically logs its state every 30 seconds to provide insights into the fuzzing progress:
 
 - `stats/fuzzer_log.json`: Contains detailed state information at each logging interval
-- `stats/progress_data.csv`: CSV file for easy data analysis and visualization
+- `stats/coverage_*.json`: Coverage snapshots with timestamps in the filename
 
 The logged information includes:
 - Runtime duration
 - Total executions
-- Coverage count (varies based on coverage type)
+- Coverage count for each tracked metric
 - Crash count
 - Queue size
 - Current fuzzing level
-
-When using the `-a` (all-coverage) flag, the coverage information includes separate counts for block, edge, and path coverage.
 
 ### Example
 
@@ -80,14 +78,14 @@ When using the `-a` (all-coverage) flag, the coverage information includes separ
 
 2. Run the fuzzer:
    ```bash
-   # For a program that reads from file with block coverage
-   ./dummy-fuzzer -i seeds/ -o output/ -c block -- ./target -f @@
+   # Track edge and path coverage, use edge coverage for feedback
+   ./dummy-fuzzer -i seeds/ -o output/ -c edge,path -u edge -- ./target -f @@
 
-   # For a program that reads from stdin with path coverage
-   ./dummy-fuzzer -i seeds/ -o output/ -c path -- ./target
-   
-   # For a program with all coverage types enabled
-   ./dummy-fuzzer -i seeds/ -o output/ -a -- ./target -f @@
+   # Track all coverage types, use block and path coverage for feedback
+   ./dummy-fuzzer -i seeds/ -o output/ -c block,edge,path -u block,path -- ./target -f @@
+
+   # Track and use only block coverage
+   ./dummy-fuzzer -i seeds/ -o output/ -c block -u block -- ./target
    ```
 
 ### Crash Detection
