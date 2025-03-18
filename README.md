@@ -24,9 +24,8 @@ The usage is similar to AFL(++):
 
 - `-i, --input-dir <DIR>`: Directory containing initial seed files
 - `-o, --output-dir <DIR>`: Output directory where findings will be saved
-- `-c, --coverage-type <TYPE>`: Coverage type to use (default: "block")
-  - Supported types: "block", "edge", "path"
-- `-a, --all-coverage`: Enable tracking of all coverage types simultaneously
+- `-c, --coverage-type <METRICS>`: Comma-separated list of coverage metrics to track (block, edge, path)
+- `-u, --use-coverage <METRICS>`: Comma-separated list of coverage metrics used to provide feedbacks to the fuzzer (block, edge, path)
 - `-- <target_program> [args...]`: Target program and its arguments
 
 ### Input Modes
@@ -35,12 +34,12 @@ The fuzzer supports two modes of providing input to the target program:
 
 1. **File Input**: Use `@@` in the target program's arguments to specify where the input file should be placed
    ```bash
-   ./dummy-fuzzer -i seeds/ -o output/ -- ./target -f @@
+   ./dummy-fuzzer -i seeds/ -o output/ -c edge,path -u edge -- ./target -f @@
    ```
 
 2. **Stdin Input**: If no `@@` is specified, input will be provided via stdin
    ```bash
-   ./dummy-fuzzer -i seeds/ -o output/ -- ./target
+   ./dummy-fuzzer -i seeds/ -o output/ -c block -u block -- ./target
    ```
 
 ### Output Structure
