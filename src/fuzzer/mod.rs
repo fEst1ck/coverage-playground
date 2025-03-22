@@ -18,6 +18,7 @@ use std::{
 use log::{debug, error, info, warn};
 use memmap2::MmapOptions;
 use rand::Rng;
+use rustc_hash::FxHashSet;
 use serde_json;
 
 use crate::{
@@ -85,6 +86,8 @@ pub struct Fuzzer {
     queue: VecDeque<TestCase>,
     /// Coverage metric
     coverage: CoverageMetricAggregator,
+    /// Tracks the last blocks of the executed paths
+    exit_blocks: FxHashSet<u32>,
     /// Whether the target program uses file input
     uses_file_input: bool,
     /// Directory for storing queue files
@@ -147,6 +150,7 @@ impl Fuzzer {
 
         Ok(Self {
             coverage: coverage_metric_aggregator,
+            exit_blocks: FxHashSet::default(),
             args,
             queue: VecDeque::new(),
             uses_file_input,
@@ -256,11 +260,10 @@ impl Fuzzer {
         Ok(filename)
     }
 
-    fn save_crash(&mut self, data: &[u8], signal: i32) -> Result<()> {
+    fn save_crash(&self, data: &[u8], signal: i32) -> Result<()> {
         let filename = format!("crash:{:06},sig:{}", self.next_id, signal);
         let path = self.get_crash_path(&filename);
         fs::write(path, data)?;
-        self.stats.crash_count += 1;
         Ok(())
     }
 
@@ -345,25 +348,6 @@ impl Fuzzer {
             );
         }
 
-        let mut _crashed = false;
-        if !output.status.success() {
-            // Check if process was terminated by a signal (crash)
-            if let Some(signal) = output.status.signal() {
-                // SIGSEGV = 11, SIGABRT = 6, SIGBUS = 7
-                match signal {
-                    11 | 6 | 7 => {
-                        _crashed = true;
-                        // Save crash
-                        self.save_crash(input, signal)?;
-                    }
-                    _ => {
-                        warn!("Target terminated by unhandled signal: {}", signal);
-                        // Continue fuzzing
-                    }
-                }
-            }
-        }
-
         temp_file.close()?;
 
         let mut path = Vec::new();
@@ -377,6 +361,28 @@ impl Fuzzer {
                 path.push(block_id);
             }
             debug!("Coverage path: {:?}", path);
+        }
+
+        if !output.status.success() {
+            // Check if process was terminated by a signal (crash)
+            if let Some(signal) = output.status.signal() {
+                // SIGSEGV = 11, SIGABRT = 6, SIGBUS = 7
+                match signal {
+                    // detect crashes
+                    11 | 6 | 7 => {
+                        // deduplicate crashes by program counter
+                        if self.exit_blocks.insert(path.last().unwrap().clone()) {
+                            // Save crash
+                            self.save_crash(input, signal)?;
+                            self.stats.crash_count += 1;
+                        }
+                    }
+                    _ => {
+                        warn!("Target terminated by unhandled signal: {}", signal);
+                        // Continue fuzzing
+                    }
+                }
+            }
         }
 
         self.update_status_screen();
