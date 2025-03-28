@@ -735,13 +735,13 @@ impl Fuzzer {
     /// Log the full coverage of each type with timestamp
     fn log_full_coverage(&self) -> Result<()> {
         let full_cov = self.coverage.full_cov();
-        let elapsed = self.stats.start_time
+        let _elapsed = self.stats.start_time
             .map(|t| t.elapsed())
             .unwrap_or_default()
             .as_secs();
         
         for (metric_name, cov) in full_cov {    
-            let filename = format!("coverage_{}_{:08}.json", metric_name, elapsed);
+            let filename = format!("coverage_{}.json", metric_name);
             let full_cov_path = self.stats_dir.join(filename);
             let mut file = File::create(&full_cov_path)?;
             file.write_all(serde_json::to_string_pretty(&cov)?.as_bytes())?;
