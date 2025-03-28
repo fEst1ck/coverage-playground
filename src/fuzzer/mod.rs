@@ -6,7 +6,7 @@
 mod error;
 
 use std::{
-    collections::VecDeque,
+    collections::BinaryHeap,
     fs::{self, File, OpenOptions},
     io::Write,
     os::unix::process::ExitStatusExt,
@@ -24,7 +24,7 @@ use serde_json;
 use crate::{
     cli::Args,
     coverage::{
-        get_coverage_metric_by_name, CoverageFeedback, CoverageMetric, CoverageMetricAggregator,
+        get_coverage_metric_by_name, get_metric_priority, CoverageFeedback, CoverageMetric, CoverageMetricAggregator
     },
 };
 pub use error::{FuzzerError, Result};
@@ -34,10 +34,24 @@ const COVERAGE_SHM_SIZE: usize = 512 * 1024 * 1024; // 512MB
 const LOG_INTERVAL_SECS: u64 = 30; // Log state every 30 seconds
 
 /// Test case representation
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct TestCase {
     /// Name of the file in the queue directory
     filename: String,
+    /// Priority of the test case
+    priority: usize,
+}
+
+impl PartialOrd for TestCase {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.priority.cmp(&other.priority))
+    }
+}
+
+impl Ord for TestCase {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.priority.cmp(&other.priority)
+    }
 }
 
 /// Statistics tracking for the fuzzing session
@@ -83,7 +97,7 @@ pub struct Fuzzer {
     /// Command line arguments
     args: Args,
     /// Queue of test cases
-    queue: VecDeque<TestCase>,
+    queue: BinaryHeap<TestCase>,
     /// Coverage metric
     coverage: CoverageMetricAggregator,
     /// Tracks the last blocks of the executed paths
@@ -152,7 +166,7 @@ impl Fuzzer {
             coverage: coverage_metric_aggregator,
             exit_blocks: FxHashSet::default(),
             args,
-            queue: VecDeque::new(),
+            queue: BinaryHeap::new(),
             uses_file_input,
             queue_dir,
             crashes_dir,
@@ -393,15 +407,18 @@ impl Fuzzer {
         Ok((path, cov_feedback))
     }
 
-    fn summarize_coverage(&self, cov: &CoverageFeedback) -> bool {
+    fn summarize_coverage(&self, cov: &CoverageFeedback) -> (bool, usize) {
+        let mut any_cov = false;
+        let mut priority = 0;
         for (metric_name, &new_cov) in cov.iter() {
             if self.args.use_coverage.contains(&metric_name.to_string()) {
                 if new_cov {
-                    return true;
+                    any_cov = true;
+                    priority = priority.max(get_metric_priority(metric_name.to_string()));
                 }
             }
         }
-        false
+        (any_cov, priority)
     }
 
     /// Mutate a test case
@@ -466,17 +483,17 @@ impl Fuzzer {
 
     /// Fuzz until the queue is empty
     fn fuzz_one_level(&mut self) -> Result<()> {
-        while let Some(test_case) = self.queue.pop_front() {
+        while let Some(test_case) = self.queue.pop() {
             info!("Fuzzing: {}", test_case.filename);
 
             match self.mutate(&test_case) {
                 Ok(mutated) => match self.run_and_get_coverage(&mutated) {
                     Ok((_path, cov_feedback)) => {
-                        let trigger_new_cov = self.summarize_coverage(&cov_feedback);
+                        let (trigger_new_cov, priority) = self.summarize_coverage(&cov_feedback);
                         if trigger_new_cov {
                             let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
                             self.stats.new_coverage_count += 1;
-                            self.queue.push_back(TestCase { filename });
+                            self.queue.push(TestCase { filename, priority });
                         }
                     }
                     Err(e) => {
@@ -513,8 +530,9 @@ impl Fuzzer {
                 // Get just the filename component, not the full path
                 if let Some(filename) = entry.path().file_name() {
                     if let Some(filename_str) = filename.to_str() {
-                        self.queue.push_back(TestCase {
+                        self.queue.push(TestCase {
                             filename: filename_str.to_string(),
+                            priority: 0,
                         });
                     }
                 }
@@ -533,11 +551,11 @@ impl Fuzzer {
 
                 match self.run_and_get_coverage(&data) {
                     Ok((path, cov_feedback)) => {
-                        let triggers_new_cov = self.summarize_coverage(&cov_feedback);
+                        let (triggers_new_cov, priority) = self.summarize_coverage(&cov_feedback);
                         if triggers_new_cov {
                             let filename = self.save_to_queue(&data, triggers_new_cov)?;
                             self.stats.new_coverage_count += 1;
-                            self.queue.push_back(TestCase { filename });
+                            self.queue.push(TestCase { filename, priority });
                             info!("Loaded seed file: {}", entry.path().display());
                             debug!("Path: {:?}", path);
                         } else {

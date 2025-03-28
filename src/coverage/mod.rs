@@ -9,6 +9,7 @@ mod path;
 use std::collections::BTreeMap;
 
 pub use block::BlockCoverage;
+use cached::proc_macro::cached;
 pub use edge::EdgeCoverage;
 pub use path::PathCoverage;
 use serde_json::Value;
@@ -42,6 +43,11 @@ pub fn get_coverage_metric_by_name(name: &str) -> Option<Box<dyn CoverageMetric>
         "path" => Some(Box::new(PathCoverage::default())),
         _ => None,
     }
+}
+
+#[cached]
+pub fn get_metric_priority(name: String) -> usize {
+    get_coverage_metric_by_name(&name).map(|m| m.priority()).unwrap()
 }
 
 pub type CoverageFeedback<'a> = BTreeMap<&'a str, bool>;
