@@ -45,4 +45,8 @@ impl CoverageMetric for PathCoverage {
     fn name(&self) -> &'static str {
         "path"
     }
+
+    fn priority(&self) -> usize {
+        10
+    }
 }

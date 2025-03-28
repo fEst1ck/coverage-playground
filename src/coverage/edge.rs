@@ -30,4 +30,8 @@ impl CoverageMetric for EdgeCoverage {
     fn name(&self) -> &'static str {
         "edge"
     }
+
+    fn priority(&self) -> usize {
+        90
+    }
 }

@@ -29,4 +29,8 @@ impl CoverageMetric for BlockCoverage {
     fn name(&self) -> &'static str {
         "block"
     }
+
+    fn priority(&self) -> usize {
+        100
+    }
 }

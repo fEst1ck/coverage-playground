@@ -28,6 +28,10 @@ pub trait CoverageMetric {
     fn name(&self) -> &'static str {
         ""
     }
+
+    fn priority(&self) -> usize {
+        0
+    }
 }
 
 /// Get a coverage metric by name
