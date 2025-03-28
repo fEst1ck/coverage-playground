@@ -63,6 +63,7 @@ struct Stats {
     start_time: Option<Instant>,
     last_status_time: Option<Instant>,
     last_log_time: Option<Instant>,
+    last_new_finding_time: Option<Instant>,
     level: usize,
 }
 
@@ -72,6 +73,7 @@ impl Stats {
         Self {
             start_time: Some(now),
             last_log_time: Some(now),
+            last_new_finding_time: Some(now),
             ..Default::default()
         }
     }
@@ -493,6 +495,7 @@ impl Fuzzer {
                         if trigger_new_cov {
                             let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
                             self.stats.new_coverage_count += 1;
+                            self.stats.last_new_finding_time = Some(Instant::now());
                             self.queue.push(TestCase { filename, priority });
                         }
                     }
@@ -555,6 +558,7 @@ impl Fuzzer {
                         if triggers_new_cov {
                             let filename = self.save_to_queue(&data, triggers_new_cov)?;
                             self.stats.new_coverage_count += 1;
+                            self.stats.last_new_finding_time = Some(Instant::now());
                             self.queue.push(TestCase { filename, priority });
                             info!("Loaded seed file: {}", entry.path().display());
                             debug!("Path: {:?}", path);
@@ -593,11 +597,21 @@ impl Fuzzer {
         let minutes = (elapsed.as_secs() % 3600) / 60;
         let seconds = elapsed.as_secs() % 60;
 
+        let since_last_finding = self
+            .stats
+            .last_new_finding_time
+            .map(|t| t.elapsed())
+            .unwrap_or_default();
+        let finding_hours = since_last_finding.as_secs() / 3600;
+        let finding_minutes = (since_last_finding.as_secs() % 3600) / 60;
+        let finding_seconds = since_last_finding.as_secs() % 60;
+
         println!("\x1B[2J\x1B[1;1H"); // Clear screen and move cursor to top
         println!("=== Fuzzer Status ===");
         println!("Runtime: {:02}:{:02}:{:02}", hours, minutes, seconds);
         println!("Total executions: {}", self.stats.total_executions);
         println!("New coverage count: {}", self.stats.new_coverage_count);
+        println!("Time since last finding: {:02}:{:02}:{:02}", finding_hours, finding_minutes, finding_seconds);
         println!("Coverage count: {}", self.coverage.cov_info());
         println!("Crashes found: {}", self.stats.crash_count);
         println!(
