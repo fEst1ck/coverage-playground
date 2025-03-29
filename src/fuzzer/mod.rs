@@ -210,11 +210,11 @@ impl Fuzzer {
 
         // Add coverage type
         let coverage_metrics = &args.coverage_types;
-        command.push_str(&format!(" -c {}", coverage_metrics.join(", ")));
+        command.push_str(&format!(" -c {}", coverage_metrics.join(",")));
 
         // Add use coverage type
         let use_coverage_metrics = &args.use_coverage;
-        command.push_str(&format!(" -u {}", use_coverage_metrics.join(", ")));
+        command.push_str(&format!(" -u {}", use_coverage_metrics.join(",")));
 
         // Add all coverage if enabled
         if args.all_coverage {
