@@ -14,7 +14,7 @@ pub use edge::EdgeCoverage;
 pub use path::PathCoverage;
 use serde_json::Value;
 
-pub trait CoverageMetric {
+pub trait CoverageMetric: Send {
     /// Update coverage with the given path and return true if new coverage was found
     fn update_from_path(&mut self, path: &[u32]) -> bool;
 

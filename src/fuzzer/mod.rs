@@ -4,6 +4,7 @@
 // `mutate`: implements the mutation strategy
 // `log_fuzzing_progress`: writes the fuzzer states to log file(s)
 mod error;
+pub mod parallel;
 
 use std::{
     collections::BinaryHeap,
@@ -18,13 +19,15 @@ use std::{
 use log::{debug, error, info, warn};
 use memmap2::MmapOptions;
 use rand::Rng;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashSet, FxHashMap};
+use serde::{Deserialize, Serialize};
 use serde_json;
 
 use crate::{
     cli::Args,
     coverage::{
-        get_coverage_metric_by_name, get_metric_priority, CoverageFeedback, CoverageMetric, CoverageMetricAggregator
+        get_coverage_metric_by_name, get_metric_priority, CoverageFeedback, CoverageMetric,
+        CoverageMetricAggregator,
     },
 };
 pub use error::{FuzzerError, Result};
@@ -34,8 +37,8 @@ const COVERAGE_SHM_SIZE: usize = 512 * 1024 * 1024; // 512MB
 const LOG_INTERVAL_SECS: u64 = 30; // Log state every 30 seconds
 
 /// Test case representation
-#[derive(Clone, PartialEq, Eq)]
-struct TestCase {
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TestCase {
     /// Name of the file in the queue directory
     filename: String,
     /// Priority of the test case
@@ -118,10 +121,14 @@ pub struct Fuzzer {
     stats: Stats,
     /// Shared memory for coverage metric
     coverage_mmap: memmap2::MmapMut,
+    /// Unique identifier for this fuzzer instance
+    id: usize,
+    /// Map of fuzzer ID to set of seen test cases from that fuzzer
+    seen_test_cases: FxHashMap<usize, FxHashSet<String>>,
 }
 
 impl Fuzzer {
-    pub fn new(args: Args) -> Result<Self> {
+    pub fn new(args: Args, id: usize) -> Result<Self> {
         let input_marker_count = args
             .target_cmd
             .iter()
@@ -176,6 +183,8 @@ impl Fuzzer {
             next_id: 0,
             stats: Stats::new(),
             coverage_mmap,
+            id,
+            seen_test_cases: FxHashMap::default(),
         })
     }
 
@@ -253,6 +262,7 @@ impl Fuzzer {
         self.fuzz_loop()
     }
 
+    /// Get the path of the file in the queue directory
     fn get_queue_path(&self, filename: &str) -> PathBuf {
         self.queue_dir.join(filename)
     }
@@ -292,7 +302,10 @@ impl Fuzzer {
     ///   - The execution path taken during execution
     ///   - Coverage feedback
     /// * `Err` if there was an error running the target or collecting coverage
-    fn run_and_get_coverage(&mut self, input: &[u8]) -> Result<(Vec<u32>, CoverageFeedback<'static>)> {
+    fn run_and_get_coverage(
+        &mut self,
+        input: &[u8],
+    ) -> Result<(Vec<u32>, CoverageFeedback<'static>)> {
         self.stats.total_executions += 1;
 
         // Prepare command
@@ -607,11 +620,14 @@ impl Fuzzer {
         let finding_seconds = since_last_finding.as_secs() % 60;
 
         println!("\x1B[2J\x1B[1;1H"); // Clear screen and move cursor to top
-        println!("=== Fuzzer Status ===");
+        println!("=== Fuzzer Status (Instance {}) ===", self.id);
         println!("Runtime: {:02}:{:02}:{:02}", hours, minutes, seconds);
         println!("Total executions: {}", self.stats.total_executions);
         println!("New coverage count: {}", self.stats.new_coverage_count);
-        println!("Time since last finding: {:02}:{:02}:{:02}", finding_hours, finding_minutes, finding_seconds);
+        println!(
+            "Time since last finding: {:02}:{:02}:{:02}",
+            finding_hours, finding_minutes, finding_seconds
+        );
         println!("Coverage count: {}", self.coverage.cov_info());
         println!("Crashes found: {}", self.stats.crash_count);
         println!(
@@ -697,17 +713,76 @@ impl Fuzzer {
     /// Log the full coverage of each type with timestamp
     fn log_full_coverage(&self) -> Result<()> {
         let full_cov = self.coverage.full_cov();
-        let _elapsed = self.stats.start_time
+        let _elapsed = self
+            .stats
+            .start_time
             .map(|t| t.elapsed())
             .unwrap_or_default()
             .as_secs();
-        
-        for (metric_name, cov) in full_cov {    
+
+        for (metric_name, cov) in full_cov {
             let filename = format!("coverage_{}.json", metric_name);
             let full_cov_path = self.stats_dir.join(filename);
             let mut file = File::create(&full_cov_path)?;
             file.write_all(serde_json::to_string_pretty(&cov)?.as_bytes())?;
         }
+        Ok(())
+    }
+
+    /// Get test cases from the seed pool
+    pub fn get_seed_pool_test_cases(&self) -> impl Iterator<Item = TestCase> {
+        if let Ok(entries) = fs::read_dir(&self.queue_dir) {
+            itertools::Either::Left(entries.flatten().filter_map(|entry| {
+                if let Some(filename) = entry.file_name().to_str() {
+                    Some(TestCase {
+                        filename: filename.to_string(),
+                        priority: 0,
+                    })
+                } else {
+                    None
+                }
+            }))
+        } else {
+            itertools::Either::Right(std::iter::empty())
+        }
+    }
+
+    /// Sync seed pool from another fuzzer instance
+    pub fn sync_seed_pool(&mut self, other: &Fuzzer) -> Result<()> {
+        let other_id = other.id;
+        let test_cases: Vec<TestCase> = other.get_seed_pool_test_cases().collect();
+        
+        // Import only unseen test cases
+        // .collect_vec() to avoid borrowing issues
+        for test_case in test_cases {
+            let seen = self.seen_test_cases.entry(other_id).or_insert_with(FxHashSet::default);
+
+            let is_new = seen.insert(test_case.filename.clone());
+            if !is_new {
+                continue;
+            }
+
+            let data = fs::read(other.get_queue_path(&test_case.filename))?;
+            match self.run_and_get_coverage(&data) {
+                Ok((_path, cov_feedback)) => {
+                    let (trigger_new_cov, priority) = self.summarize_coverage(&cov_feedback);
+                    if trigger_new_cov {
+                        let filename = self.save_to_queue(&data, trigger_new_cov)?;
+                        self.stats.new_coverage_count += 1;
+                        self.stats.last_new_finding_time = Some(Instant::now());
+                        self.queue.push(TestCase { filename, priority });
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        "Error running mutated test case: {} from other fuzzer: {}\n{}",
+                        test_case.filename, other.id, e
+                    );
+                    continue;
+                }
+            }
+        }
+
         Ok(())
     }
 }

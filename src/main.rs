@@ -15,7 +15,7 @@ fn main() {
         process::exit(1);
     }
 
-    match Fuzzer::new(args) {
+    match Fuzzer::new(args, 0) {
         Ok(mut fuzzer) => {
             if let Err(e) = fuzzer.run() {
                 error!("Error running fuzzer: {}", e);

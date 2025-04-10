@@ -22,6 +22,10 @@ pub struct Args {
     #[arg(short = 'o', long)]
     pub output_dir: PathBuf,
 
+    /// Number of parallel fuzzer instances
+    #[arg(short = 'j', long, default_value = "1")]
+    pub num_instances: usize,
+
     /// Coverage types to use (comma-separated: block, edge, path)
     #[arg(short = 'c', long, default_value = "block", value_delimiter = ',')]
     pub coverage_types: Vec<String>,
@@ -345,5 +349,37 @@ mod tests {
         parse_args(&[
             "fuzzer", "-i", "/seeds", "-o", "/output", "-u", "block,invalid,path", "--", "target",
         ]);
+    }
+
+    #[test]
+    fn test_num_instances() {
+        // Test default (1 instance)
+        let args = parse_args(&["fuzzer", "-i", "/seeds", "-o", "/output", "--", "target"]);
+        assert_eq!(args.num_instances, 1);
+
+        // Test explicit number of instances
+        let args = parse_args(&[
+            "fuzzer", "-i", "/seeds", "-o", "/output", "-j", "4", "--", "target",
+        ]);
+        assert_eq!(args.num_instances, 4);
+
+        // Test with other options
+        let args = parse_args(&[
+            "fuzzer",
+            "-i",
+            "/seeds",
+            "-o",
+            "/output",
+            "-j",
+            "8",
+            "-c",
+            "block,edge",
+            "--debug",
+            "--",
+            "target",
+        ]);
+        assert_eq!(args.num_instances, 8);
+        assert_eq!(args.coverage_types, vec![String::from("block"), String::from("edge")]);
+        assert_eq!(args.debug, true);
     }
 }
