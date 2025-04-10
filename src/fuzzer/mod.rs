@@ -272,7 +272,7 @@ impl Fuzzer {
         self.crashes_dir.join(filename)
     }
 
-    fn save_to_queue(&mut self, data: &[u8], new_coverage: bool) -> Result<String> {
+    fn save_to_seed_pool(&mut self, data: &[u8], new_coverage: bool) -> Result<String> {
         let filename = if new_coverage {
             format!("id:{:06}:+cov", self.next_id)
         } else {
@@ -509,7 +509,7 @@ impl Fuzzer {
                     Ok((_path, cov_feedback)) => {
                         let (trigger_new_cov, priority) = self.summarize_coverage(&cov_feedback);
                         if trigger_new_cov {
-                            let filename = self.save_to_queue(&mutated, trigger_new_cov)?;
+                            let filename = self.save_to_seed_pool(&mutated, trigger_new_cov)?;
                             self.stats.new_coverage_count += 1;
                             self.stats.last_new_finding_time = Some(Instant::now());
                             self.queue.push(TestCase { filename, priority });
@@ -572,7 +572,7 @@ impl Fuzzer {
                     Ok((path, cov_feedback)) => {
                         let (triggers_new_cov, priority) = self.summarize_coverage(&cov_feedback);
                         if triggers_new_cov {
-                            let filename = self.save_to_queue(&data, triggers_new_cov)?;
+                            let filename = self.save_to_seed_pool(&data, triggers_new_cov)?;
                             self.stats.new_coverage_count += 1;
                             self.stats.last_new_finding_time = Some(Instant::now());
                             self.queue.push(TestCase { filename, priority });
@@ -768,10 +768,11 @@ impl Fuzzer {
                 Ok((_path, cov_feedback)) => {
                     let (trigger_new_cov, priority) = self.summarize_coverage(&cov_feedback);
                     if trigger_new_cov {
-                        let filename = self.save_to_queue(&data, trigger_new_cov)?;
+                        let filename = self.save_to_seed_pool(&data, trigger_new_cov)?;
                         self.stats.new_coverage_count += 1;
                         self.stats.last_new_finding_time = Some(Instant::now());
                         self.queue.push(TestCase { filename, priority });
+                        info!("Synced seed file: {} from fuzzer {} to fuzzer {}", test_case.filename, other.id, self.id);
                     }
                 }
                 Err(e) => {
