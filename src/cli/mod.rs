@@ -9,7 +9,7 @@ fn validate_coverage_type(s: &str) -> Result<String, String> {
     }
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 #[command(trailing_var_arg = false)]
 #[command(arg_required_else_help = true)]
