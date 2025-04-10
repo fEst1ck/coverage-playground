@@ -25,6 +25,10 @@ impl CoverageMetric for PathCoverage {
     fn update_from_path(&mut self, path: &[u32]) -> bool {
         let reduced_path = self.path_reduction.simple_reduce(path);
 
+        if std::env::var("DEBUG").unwrap_or_default() == "1" {
+            eprintln!("Path len: {:?}\nreduced path len: {:?}", path.len(), reduced_path.len());
+        }
+
         // Convert Vec<u32> to bytes
         let bytes: Vec<u8> = reduced_path
             .iter()
