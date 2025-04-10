@@ -758,7 +758,7 @@ impl Fuzzer {
         // Import only unseen test cases
         // .collect_vec() to avoid borrowing issues
         for test_case in test_cases {
-            let seen = self.seen_test_cases.entry(other_id).or_insert_with(FxHashSet::default);
+            let seen = self.seen_test_cases.entry(other_id).or_default();
 
             let is_new = seen.insert(test_case.filename.clone());
             if !is_new {
