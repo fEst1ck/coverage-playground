@@ -736,14 +736,12 @@ impl Fuzzer {
     pub fn get_seed_pool_test_cases(&self) -> impl Iterator<Item = TestCase> {
         if let Ok(entries) = fs::read_dir(&self.queue_dir) {
             itertools::Either::Left(entries.flatten().filter_map(|entry| {
-                if let Some(filename) = entry.file_name().to_str() {
-                    Some(TestCase {
+                entry.file_name().to_str().map(|filename| {
+                    TestCase {
                         filename: filename.to_string(),
                         priority: 0,
-                    })
-                } else {
-                    None
-                }
+                    }
+                })
             }))
         } else {
             itertools::Either::Right(std::iter::empty())
