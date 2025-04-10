@@ -32,7 +32,7 @@ use crate::{
 };
 pub use error::{FuzzerError, Result};
 
-const COVERAGE_SHM_PATH: &str = "/tmp/coverage_shm.bin";
+const COVERAGE_SHM_BASE: &str = "/tmp/coverage_shm";
 const COVERAGE_SHM_SIZE: usize = 512 * 1024 * 1024; // 512MB
 const LOG_INTERVAL_SECS: u64 = 30; // Log state every 30 seconds
 
@@ -158,7 +158,7 @@ impl Fuzzer {
             "Creating shared memory of size {} MB...",
             COVERAGE_SHM_SIZE / 1024 / 1024
         );
-        let coverage_mmap = Self::create_coverage_shm()?;
+        let coverage_mmap = Self::create_coverage_shm(id)?;
 
         let coverage_metrics: Vec<Box<dyn CoverageMetric>> = args
             .coverage_types
@@ -189,13 +189,14 @@ impl Fuzzer {
     }
 
     /// Create a shared memory for path coverage instrumentation
-    fn create_coverage_shm() -> Result<memmap2::MmapMut> {
+    fn create_coverage_shm(id: usize) -> Result<memmap2::MmapMut> {
+        let shm_path = format!("{}_{}.bin", COVERAGE_SHM_BASE, id);
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .truncate(true)
-            .open(COVERAGE_SHM_PATH)?;
+            .open(shm_path)?;
 
         file.set_len(COVERAGE_SHM_SIZE as u64)?;
 
@@ -335,6 +336,8 @@ impl Fuzzer {
 
         // Set RUST_BACKTRACE environment variable
         cmd.env("RUST_BACKTRACE", "1");
+        // Set FUZZER_ID environment variable
+        cmd.env("FUZZER_ID", self.id.to_string());
 
         // Use the stored mapping instead of creating a new one
         if self.coverage_mmap.len() >= 4 {
