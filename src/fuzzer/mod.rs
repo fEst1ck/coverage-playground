@@ -217,8 +217,8 @@ impl Fuzzer {
         command.push_str(&format!(" -u {}", use_coverage_metrics.join(",")));
 
         // Add all coverage if enabled
-        if args.all_coverage {
-            command.push_str(" -a");
+        if args.debug {
+            command.push_str(" --debug");
         }
 
         // Add input and output directories

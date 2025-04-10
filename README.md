@@ -26,6 +26,7 @@ The usage is similar to AFL(++):
 - `-o, --output-dir <DIR>`: Output directory where findings will be saved
 - `-c, --coverage-type <METRICS>`: Comma-separated list of coverage metrics to track (block, edge, path)
 - `-u, --use-coverage <METRICS>`: Comma-separated list of coverage metrics used to provide feedbacks to the fuzzer (block, edge, path)
+- `--debug`: Enable debug mode (prints additional information)
 - `-- <target_program> [args...]`: Target program and its arguments
 
 ### Input Modes

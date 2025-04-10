@@ -30,12 +30,12 @@ pub struct Args {
     #[arg(short = 'u', long, default_value = "block", value_delimiter = ',', value_parser = validate_coverage_type)]
     pub use_coverage: Vec<String>,
 
-    /// Enable advanced mode
-    #[arg(short = 'a', long, default_value = "false")]
-    pub all_coverage: bool,
+    /// Enable debug mode (prints additional information)
+    #[arg(long)]
+    pub debug: bool,
 
-    /// Target command and its arguments (after --)
-    #[arg(last = true, required = true, allow_hyphen_values = false)]
+    /// Target program and its arguments
+    #[arg(required = true, last = true, allow_hyphen_values = false)]
     pub target_cmd: Vec<OsString>,
 }
 
@@ -65,7 +65,7 @@ mod tests {
         assert_eq!(args.coverage_types, vec![String::from("block")]);
         assert_eq!(args.target_cmd.len(), 1);
         assert_eq!(args.target_cmd[0].to_str().unwrap(), "target");
-        assert_eq!(args.all_coverage, false);
+        assert_eq!(args.debug, false);
     }
 
     #[test]
@@ -241,29 +241,23 @@ mod tests {
     }
 
     #[test]
-    fn test_advanced_mode() {
-        // Test without advanced mode (default)
+    fn test_debug_mode() {
+        // Test without debug mode (default)
         let args = parse_args(&["fuzzer", "-i", "/seeds", "-o", "/output", "--", "target"]);
-        assert_eq!(args.all_coverage, false);
+        assert_eq!(args.debug, false);
 
-        // Test with advanced mode short flag
-        let args = parse_args(&[
-            "fuzzer", "-i", "/seeds", "-o", "/output", "-a", "--", "target",
-        ]);
-        assert_eq!(args.all_coverage, true);
-
-        // Test with advanced mode long flag
+        // Test with debug mode
         let args = parse_args(&[
             "fuzzer",
             "-i",
             "/seeds",
             "-o",
             "/output",
-            "--all-coverage",
+            "--debug",
             "--",
             "target",
         ]);
-        assert_eq!(args.all_coverage, true);
+        assert_eq!(args.debug, true);
     }
 
     #[test]
