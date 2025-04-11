@@ -52,12 +52,15 @@ impl ParallelFuzzer {
         for i in 0..self.num_instances {
             let instance = self.instances[i].clone();
             handles.push(thread::spawn(move || {
+                {
+                    let mut fuzzer = instance.lock().unwrap();
+                    fuzzer.load_initial_seeds()?;
+                }
                 loop {
                     fuzz_one_level(&instance)?;
                     let mut fuzzer = instance.lock().unwrap();
                     fuzzer.load_queue()?;
                     fuzzer.stats.level += 1;
-                    drop(fuzzer);
                 }
                 Ok(())
             }));
