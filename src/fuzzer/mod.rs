@@ -781,7 +781,7 @@ impl Fuzzer {
                         self.stats.new_coverage_count += 1;
                         self.stats.last_new_finding_time = Some(Instant::now());
                         self.queue.push(TestCase { filename, priority });
-                        info!("Synced seed file: {} from fuzzer {} to fuzzer {}", test_case.filename, other.id, self.id);
+                        warn!("Synced seed file: {} from fuzzer {} to fuzzer {}", test_case.filename, other.id, self.id);
                     }
                 }
                 Err(e) => {
