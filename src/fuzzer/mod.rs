@@ -796,23 +796,4 @@ impl Fuzzer {
 
         Ok(())
     }
-
-    /// Sync a single test case from another fuzzer
-    pub fn sync_test_case(&mut self, other: &Fuzzer, test_case: &TestCase) -> Result<()> {
-        let other_id = other.id;
-        let seen = self.seen_test_cases.entry(other_id).or_insert_with(FxHashSet::default);
-        
-        if seen.insert(test_case.filename.clone()) {
-            // Copy the test case file
-            let src_path = other.get_queue_path(&test_case.filename);
-            let dst_path = self.get_queue_path(&test_case.filename);
-            fs::copy(src_path, dst_path)?;
-            
-            // Add to queue
-            self.queue.push(test_case.clone());
-            info!("Synced test case: {} from fuzzer {} to fuzzer {}", test_case.filename, other.id, self.id);
-        }
-        
-        Ok(())
-    }
 }
