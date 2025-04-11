@@ -499,34 +499,43 @@ impl Fuzzer {
         Ok(result)
     }
 
+    pub(crate) fn next_test_case(&mut self) -> Option<TestCase> {
+        self.queue.pop()
+    }
+
     /// Fuzz until the queue is empty
     fn fuzz_one_level(&mut self) -> Result<()> {
-        while let Some(test_case) = self.queue.pop() {
-            info!("Fuzzing: {}", test_case.filename);
+        while let Some(test_case) = self.next_test_case() {
+            if let Err(e) = self.fuzz_one(&test_case) {
+                error!("Error fuzzing test case: {}", e);
+            }
+        }
+        Ok(())
+    }
 
-            match self.mutate(&test_case) {
-                Ok(mutated) => match self.run_and_get_coverage(&mutated) {
-                    Ok((_path, cov_feedback)) => {
-                        let (trigger_new_cov, priority) = self.summarize_coverage(&cov_feedback);
-                        if trigger_new_cov {
-                            let filename = self.save_to_seed_pool(&mutated, trigger_new_cov)?;
-                            self.stats.new_coverage_count += 1;
-                            self.stats.last_new_finding_time = Some(Instant::now());
-                            self.queue.push(TestCase { filename, priority });
-                        }
+    fn fuzz_one(&mut self, test_case: &TestCase) -> Result<()> {
+        info!("Fuzzing: {}", test_case.filename);
+
+        match self.mutate(&test_case) {
+            Ok(mutated) => match self.run_and_get_coverage(&mutated) {
+                Ok((_path, cov_feedback)) => {
+                    let (trigger_new_cov, priority) = self.summarize_coverage(&cov_feedback);
+                    if trigger_new_cov {
+                        let filename = self.save_to_seed_pool(&mutated, trigger_new_cov)?;
+                        self.stats.new_coverage_count += 1;
+                        self.stats.last_new_finding_time = Some(Instant::now());
+                        self.queue.push(TestCase { filename, priority });
                     }
-                    Err(e) => {
-                        error!(
-                            "Error running mutated test case from '{}': {}",
-                            test_case.filename, e
-                        );
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    error!("Error during mutation of '{}': {}", test_case.filename, e);
-                    continue;
                 }
+                Err(e) => {
+                    error!(
+                        "Error running mutated test case from '{}': {}",
+                        test_case.filename, e
+                    );
+                }
+            },
+            Err(e) => {
+                error!("Error during mutation of '{}': {}", test_case.filename, e);
             }
         }
         Ok(())
@@ -785,6 +794,25 @@ impl Fuzzer {
             }
         }
 
+        Ok(())
+    }
+
+    /// Sync a single test case from another fuzzer
+    pub fn sync_test_case(&mut self, other: &Fuzzer, test_case: &TestCase) -> Result<()> {
+        let other_id = other.id;
+        let seen = self.seen_test_cases.entry(other_id).or_insert_with(FxHashSet::default);
+        
+        if seen.insert(test_case.filename.clone()) {
+            // Copy the test case file
+            let src_path = other.get_queue_path(&test_case.filename);
+            let dst_path = self.get_queue_path(&test_case.filename);
+            fs::copy(src_path, dst_path)?;
+            
+            // Add to queue
+            self.queue.push(test_case.clone());
+            info!("Synced test case: {} from fuzzer {} to fuzzer {}", test_case.filename, other.id, self.id);
+        }
+        
         Ok(())
     }
 }

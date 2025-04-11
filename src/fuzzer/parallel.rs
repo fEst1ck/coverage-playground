@@ -4,8 +4,8 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Result;
-use log::{info, warn};
+use anyhow::{Ok, Result};
+use log::{error, info, warn};
 
 use crate::{
     cli::Args,
@@ -52,11 +52,14 @@ impl ParallelFuzzer {
         for i in 0..self.num_instances {
             let instance = self.instances[i].clone();
             handles.push(thread::spawn(move || {
-                let mut fuzzer = instance.lock().unwrap();
-                match fuzzer.run() {
-                    Ok(_) => info!("Instance {} completed successfully", i),
-                    Err(e) => warn!("Instance {} failed: {}", i, e),
+                loop {
+                    fuzz_one_level(&instance)?;
+                    let mut fuzzer = instance.lock().unwrap();
+                    fuzzer.load_queue()?;
+                    fuzzer.stats.level += 1;
+                    drop(fuzzer);
                 }
+                Ok(())
             }));
         }
 
@@ -66,7 +69,7 @@ impl ParallelFuzzer {
         let sync_handle = thread::spawn(move || {
             loop {
                 thread::sleep(sync_interval);
-                if let Err(e) = Self::sync_seed_pools(&instances) {
+                if let Err(e) = sync_seed_pools(&instances) {
                     warn!("Failed to sync queues: {}", e);
                 }
             }
@@ -82,21 +85,32 @@ impl ParallelFuzzer {
 
         Ok(())
     }
+}
 
-    /// Sync seed pools between instances
-    fn sync_seed_pools(instances: &[Arc<Mutex<Fuzzer>>]) -> Result<()> {
-        // For each pair of instances, sync their seed pools
-        for i in 0..instances.len() {
-            for j in 0..instances.len() {
-                if i != j {
-                    let fuzzer1 = instances[i].lock().unwrap();
-                    let mut fuzzer2 = instances[j].lock().unwrap();
-                    if let Err(e) = fuzzer2.sync_seed_pool(&fuzzer1) {
-                        warn!("Failed to sync seed pool from instance {} to {}: {}", i, j, e);
-                    }
-                }
+fn fuzz_one_level(fuzzer: &Arc<Mutex<Fuzzer>>) -> Result<()> {
+    loop {
+        let mut fuzzer = fuzzer.lock().unwrap();
+        if let Some(test_case) = fuzzer.next_test_case() {
+            if let Err(e) = fuzzer.fuzz_one(&test_case) {
+                error!("Error fuzzing test case: {}", e);
+            }
+        } else {
+            break;
+        }
+        drop(fuzzer);
+    }
+    Ok(())
+}
+
+fn sync_seed_pools(instances: &[Arc<Mutex<Fuzzer>>]) -> Result<()> {
+    for i in 0..instances.len() {
+        let mut fuzzer = instances[i].lock().unwrap();
+        for j in 0..instances.len() {
+            if i != j {
+                let other = instances[j].lock().unwrap();
+                fuzzer.sync_seed_pool(&other)?;
             }
         }
-        Ok(())
     }
-} 
+    Ok(())
+}
