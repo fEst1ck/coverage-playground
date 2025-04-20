@@ -73,7 +73,7 @@ impl PerFunctionPathCoverage {
         let lasts = &self.first_to_lasts[&first].clone();
         // handles the case where the function is a single block
         if lasts.contains(&first) {
-            return self.compute_hash_and_update_cov(path);
+            return self.compute_hash_and_update_cov(&reduced_path);
         }
         // maps a block to where it last appears in the buffer
         // this local to this function call
@@ -87,7 +87,7 @@ impl PerFunctionPathCoverage {
             } else if lasts.contains(&new_block) {
                 reduced_path.push(new_block);
                 *path = &path[1..];
-                return self.compute_hash_and_update_cov(path);
+                return self.compute_hash_and_update_cov(&reduced_path);
             } else {
                 if let Some(&last_idx) = loop_stack.get(&new_block) {
                     reduced_path.truncate(last_idx);
