@@ -1,5 +1,5 @@
 use super::CoverageMetric;
-use log::warn;
+use log::{info, warn};
 use md5::{compute, Digest};
 use path_reduction::json_parser::parse_json_file;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -66,11 +66,13 @@ impl PerFunctionPathCoverage {
         let first = if let Some(&first) = path.first() {
             first
         } else {
+            info!("redunce_fun: empty block");
             return false;
         };
+        info!("reducing fun starting with {}", first);
         *path = &path[1..];
         reduced_path.push(first);
-        let lasts = &self.first_to_lasts[&first].clone();
+        let lasts = &self.first_to_lasts.get(&first).expect(&format!("no entry for first block {}", first)).clone();
         // handles the case where the function is a single block
         if lasts.contains(&first) {
             return self.compute_hash_and_update_cov(&reduced_path);
@@ -83,7 +85,7 @@ impl PerFunctionPathCoverage {
             // function call
             if self.first_to_lasts.contains_key(&new_block) {
                 reduced_path.push(new_block);
-                new_cov = new_cov || self.reduce_fun(path);
+                new_cov = self.reduce_fun(path) || new_cov;
             } else if lasts.contains(&new_block) {
                 reduced_path.push(new_block);
                 *path = &path[1..];
@@ -114,7 +116,7 @@ impl CoverageMetric for PerFunctionPathCoverage {
     fn update_from_path(&mut self, mut path: &[u32]) -> bool {
         let mut new_cov = false;
         while !path.is_empty() {
-            new_cov = new_cov || self.reduce_fun(&mut path);
+            new_cov = self.reduce_fun(&mut path) || new_cov;
         }
         new_cov
     }

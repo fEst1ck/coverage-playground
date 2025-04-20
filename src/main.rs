@@ -31,6 +31,7 @@ fn main() {
         }
     } else {
         // Use single instance fuzzing
+        info!("non-parallel fuzzing");
         match Fuzzer::new(args, 0) {
             Ok(mut fuzzer) => {
                 if let Err(e) = fuzzer.run() {
