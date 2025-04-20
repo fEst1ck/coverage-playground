@@ -44,6 +44,10 @@ impl PerFunctionPathCoverage {
     /// Computes the hash of a path and updates the coverage set and stats
     fn compute_hash_and_update_cov(&mut self, path: &[u32]) -> bool {
         let path_hash = self.compute_hash(path);
+        if path.is_empty() {
+            warn!("empty path");
+            return false;
+        }
         let res = self
             .coverage
             .entry(path[0])
