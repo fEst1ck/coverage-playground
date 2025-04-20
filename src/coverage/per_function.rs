@@ -8,7 +8,6 @@ use serde_json::Value;
 type BlockID = u32;
 
 /// Per-function path coverage.
-#[derive(Default)]
 pub struct PerFunctionPathCoverage {
     coverage: FxHashMap<BlockID, FxHashSet<Digest>>,
     first_to_lasts: FxHashMap<BlockID, FxHashSet<BlockID>>,
@@ -23,9 +22,10 @@ impl PerFunctionPathCoverage {
         let first_to_lasts = modules
             .iter()
             .flat_map(|module| {
-                module.functions.iter().map(|func| {
-                    (func.entry_block, func.exit_blocks.iter().cloned().collect())
-                })
+                module
+                    .functions
+                    .iter()
+                    .map(|func| (func.entry_block, func.exit_blocks.iter().cloned().collect()))
             })
             .collect();
         Self {
@@ -37,17 +37,18 @@ impl PerFunctionPathCoverage {
 
     /// Computes the hash of a path
     fn compute_hash(&self, path: &[u32]) -> Digest {
-        let bytes: Vec<u8> = path
-        .iter()
-        .flat_map(|&num| num.to_ne_bytes())
-        .collect();
+        let bytes: Vec<u8> = path.iter().flat_map(|&num| num.to_ne_bytes()).collect();
         compute(&bytes)
     }
 
     /// Computes the hash of a path and updates the coverage set and stats
     fn compute_hash_and_update_cov(&mut self, path: &[u32]) -> bool {
         let path_hash = self.compute_hash(path);
-        let res = self.coverage.entry(path[0]).or_insert_with(FxHashSet::default).insert(path_hash);
+        let res = self
+            .coverage
+            .entry(path[0])
+            .or_insert_with(FxHashSet::default)
+            .insert(path_hash);
         if res {
             self.total_cov += 1;
         }
@@ -98,6 +99,13 @@ impl PerFunctionPathCoverage {
     }
 }
 
+impl Default for PerFunctionPathCoverage {
+    fn default() -> Self {
+        let cfg_file = std::env::var("CFG_FILE").unwrap_or_default();
+        Self::from_json(&cfg_file)
+    }
+}
+
 impl CoverageMetric for PerFunctionPathCoverage {
     fn update_from_path(&mut self, mut path: &[u32]) -> bool {
         let mut new_cov = false;
@@ -106,7 +114,7 @@ impl CoverageMetric for PerFunctionPathCoverage {
         }
         new_cov
     }
-    
+
     fn cov_info(&self) -> serde_json::Value {
         Value::Number(self.total_cov.into())
     }
