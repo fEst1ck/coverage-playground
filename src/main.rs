@@ -1,7 +1,7 @@
 use clap::Parser;
 use dummy_fuzzer::{
     cli::Args,
-    fuzzer::{Fuzzer, parallel::ParallelFuzzer},
+    fuzzer::{parallel::ParallelFuzzer, Fuzzer},
 };
 use env_logger;
 use log::{error, info};

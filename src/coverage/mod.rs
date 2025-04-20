@@ -50,7 +50,9 @@ pub fn get_coverage_metric_by_name(name: &str) -> Option<Box<dyn CoverageMetric>
 
 #[cached]
 pub fn get_metric_priority(name: String) -> usize {
-    get_coverage_metric_by_name(&name).map(|m| m.priority()).unwrap()
+    get_coverage_metric_by_name(&name)
+        .map(|m| m.priority())
+        .unwrap()
 }
 
 pub type CoverageFeedback<'a> = BTreeMap<&'a str, bool>;

@@ -24,7 +24,12 @@ impl CoverageMetric for EdgeCoverage {
     }
 
     fn full_cov(&self) -> Value {
-        Value::Array(self.edges.iter().map(|e| Value::Array(vec![Value::Number(e.0.into()), Value::Number(e.1.into())])).collect())
+        Value::Array(
+            self.edges
+                .iter()
+                .map(|e| Value::Array(vec![Value::Number(e.0.into()), Value::Number(e.1.into())]))
+                .collect(),
+        )
     }
 
     fn name(&self) -> &'static str {

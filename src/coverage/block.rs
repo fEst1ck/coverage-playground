@@ -23,7 +23,12 @@ impl CoverageMetric for BlockCoverage {
     }
 
     fn full_cov(&self) -> Value {
-        Value::Array(self.blocks.iter().map(|b| Value::Number((*b).into())).collect())
+        Value::Array(
+            self.blocks
+                .iter()
+                .map(|b| Value::Number((*b).into()))
+                .collect(),
+        )
     }
 
     fn name(&self) -> &'static str {

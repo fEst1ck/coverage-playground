@@ -7,10 +7,7 @@ use std::{
 use anyhow::{Ok, Result};
 use log::{error, info, warn};
 
-use crate::{
-    cli::Args,
-    fuzzer::Fuzzer,
-};
+use crate::{cli::Args, fuzzer::Fuzzer};
 
 /// The interval to sync the fuzzer instances in seconds
 const SYNC_INTERVAL: u64 = 60;
@@ -45,7 +42,10 @@ impl ParallelFuzzer {
 
     /// Run the parallel fuzzer
     pub fn run(&mut self) -> Result<()> {
-        info!("Starting parallel fuzzing with {} instances", self.num_instances);
+        info!(
+            "Starting parallel fuzzing with {} instances",
+            self.num_instances
+        );
 
         // Spawn worker threads
         let mut handles = Vec::with_capacity(self.num_instances);
@@ -69,12 +69,10 @@ impl ParallelFuzzer {
         // Spawn sync thread
         let sync_interval = Duration::from_secs(SYNC_INTERVAL);
         let instances = self.instances.clone();
-        let sync_handle = thread::spawn(move || {
-            loop {
-                thread::sleep(sync_interval);
-                if let Err(e) = sync_seed_pools(&instances) {
-                    warn!("Failed to sync queues: {}", e);
-                }
+        let sync_handle = thread::spawn(move || loop {
+            thread::sleep(sync_interval);
+            if let Err(e) = sync_seed_pools(&instances) {
+                warn!("Failed to sync queues: {}", e);
             }
         });
 

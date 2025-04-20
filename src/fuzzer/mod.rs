@@ -19,7 +19,7 @@ use std::{
 use log::{debug, error, info, warn};
 use memmap2::MmapOptions;
 use rand::Rng;
-use rustc_hash::{FxHashSet, FxHashMap};
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -745,11 +745,9 @@ impl Fuzzer {
     pub fn get_seed_pool_test_cases(&self) -> impl Iterator<Item = TestCase> {
         if let Ok(entries) = fs::read_dir(&self.queue_dir) {
             itertools::Either::Left(entries.flatten().filter_map(|entry| {
-                entry.file_name().to_str().map(|filename| {
-                    TestCase {
-                        filename: filename.to_string(),
-                        priority: 0,
-                    }
+                entry.file_name().to_str().map(|filename| TestCase {
+                    filename: filename.to_string(),
+                    priority: 0,
                 })
             }))
         } else {
@@ -761,7 +759,7 @@ impl Fuzzer {
     pub fn sync_seed_pool(&mut self, other: &Fuzzer) -> Result<()> {
         let other_id = other.id;
         let test_cases: Vec<TestCase> = other.get_seed_pool_test_cases().collect();
-        
+
         // Import only unseen test cases
         // .collect_vec() to avoid borrowing issues
         for test_case in test_cases {
@@ -781,7 +779,10 @@ impl Fuzzer {
                         self.stats.new_coverage_count += 1;
                         self.stats.last_new_finding_time = Some(Instant::now());
                         self.queue.push(TestCase { filename, priority });
-                        warn!("Synced seed file: {} from fuzzer {} to fuzzer {}", test_case.filename, other.id, self.id);
+                        warn!(
+                            "Synced seed file: {} from fuzzer {} to fuzzer {}",
+                            test_case.filename, other.id, self.id
+                        );
                     }
                 }
                 Err(e) => {
