@@ -6,12 +6,14 @@
 mod block;
 mod edge;
 mod path;
+mod per_function;
 use std::collections::BTreeMap;
 
 pub use block::BlockCoverage;
 use cached::proc_macro::cached;
 pub use edge::EdgeCoverage;
 pub use path::PathCoverage;
+use per_function::PerFunctionPathCoverage;
 use serde_json::Value;
 
 pub trait CoverageMetric: Send {
@@ -41,6 +43,7 @@ pub fn get_coverage_metric_by_name(name: &str) -> Option<Box<dyn CoverageMetric>
         "block" => Some(Box::new(BlockCoverage::default())),
         "edge" => Some(Box::new(EdgeCoverage::default())),
         "path" => Some(Box::new(PathCoverage::default())),
+        "pfp" => Some(Box::new(PerFunctionPathCoverage::default())),
         _ => None,
     }
 }
