@@ -33,7 +33,7 @@ impl ParallelFuzzer {
             instance_args.output_dir = args.output_dir.join(format!("instance_{}", i));
             // Set instance-specific coverage types
             if !args.instance_coverage.is_empty() {
-                instance_args.coverage_types = args.get_instance_coverage_types(i);
+                instance_args.use_coverage = args.get_instance_coverage_types(i);
             }
             
             instances.push(Arc::new(Mutex::new(Fuzzer::new(instance_args, i)?)));
