@@ -34,6 +34,10 @@ pub struct Args {
     #[arg(short = 'u', long, default_value = "block", value_delimiter = ',', value_parser = validate_coverage_type)]
     pub use_coverage: Vec<String>,
 
+    /// Instance-specific coverage types (format: instance_id:coverage_types)
+    #[arg(long, value_delimiter = ':')]
+    pub instance_coverage: Vec<String>,
+
     /// Enable debug mode (prints additional information)
     #[arg(long)]
     pub debug: bool,
@@ -48,7 +52,23 @@ impl Args {
         if self.coverage_types.is_empty() {
             anyhow::bail!("At least one coverage type must be specified");
         }
+        if !self.instance_coverage.is_empty() && self.instance_coverage.len() != self.num_instances {
+            anyhow::bail!("Number of instance-specific coverage types must match number of instances");
+        }
         Ok(())
+    }
+
+    /// Get coverage types for a specific instance
+    pub fn get_instance_coverage_types(&self, instance_id: usize) -> Vec<String> {
+        self.instance_coverage
+            .get(instance_id)
+            .expect(&format!(
+                "no instance coverage for instance {}",
+                instance_id
+            ))
+            .split(',')
+            .map(|s| s.to_string())
+            .collect()
     }
 }
 
@@ -421,5 +441,41 @@ mod tests {
             vec![String::from("block"), String::from("edge")]
         );
         assert_eq!(args.debug, true);
+    }
+
+    #[test]
+    fn test_instance_coverage() {
+        // Test instance-specific coverage types
+        let args = parse_args(&[
+            "fuzzer",
+            "-i",
+            "/seeds",
+            "-o",
+            "/out",
+            "-j",
+            "2",
+            "--instance-coverage",
+            "block,edge:path",
+            "--",
+            "target",
+        ]);
+        assert_eq!(args.get_instance_coverage_types(0), vec!["block", "edge"]);
+        assert_eq!(args.get_instance_coverage_types(1), vec!["path"]);
+
+        // Test fallback to default coverage types
+        let args = parse_args(&[
+            "fuzzer",
+            "-i",
+            "/seeds",
+            "-o",
+            "/out",
+            "-j",
+            "2",
+            "--instance-coverage",
+            "block,edge",
+            "--",
+            "target",
+        ]);
+        assert_eq!(args.get_instance_coverage_types(0), vec!["block", "edge"]);
     }
 }
