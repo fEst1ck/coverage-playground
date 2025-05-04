@@ -1,18 +1,24 @@
 use super::CoverageMetric;
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHashMap;
 use serde_json::Value;
 
 #[derive(Default)]
 pub struct BlockCoverage {
-    blocks: FxHashSet<u32>,
+    blocks: FxHashMap<u32, usize>,
 }
 
 impl CoverageMetric for BlockCoverage {
     fn update_from_path(&mut self, path: &[u32]) -> bool {
         let mut new_coverage = false;
 
-        for block in path {
-            new_coverage |= self.blocks.insert(*block);
+        for &block in path {
+            self.blocks
+                .entry(block)
+                .and_modify(|count| *count += 1)
+                .or_insert_with(|| {
+                    new_coverage = true;
+                    1
+                });
         }
 
         new_coverage
@@ -22,11 +28,17 @@ impl CoverageMetric for BlockCoverage {
         Value::Number(self.blocks.len().into())
     }
 
+    // an array of [block, count]
     fn full_cov(&self) -> Value {
         Value::Array(
             self.blocks
                 .iter()
-                .map(|b| Value::Number((*b).into()))
+                .map(|(block, count)| {
+                    Value::Array(vec![
+                        Value::Number((*block).into()),
+                        Value::Number((*count).into()),
+                    ])
+                })
                 .collect(),
         )
     }
