@@ -794,7 +794,7 @@ impl Fuzzer {
     /// Write the coverage graph to a `coverage.dot` file under the stats directory
     fn _write_coverage_graph(&self) -> Result<()> {
         let dot = self.get_coverage_graph();
-        let mut file = File::create(&self.stats_dir.join(format!("coverage_{}.dot", self.stats.last_graph_time.unwrap().elapsed().as_secs())))?;
+        let mut file = File::create(&self.stats_dir.join(format!("coverage_{}.dot", self.stats.start_time.unwrap().elapsed().as_secs())))?;
         file.write_all(dot.as_bytes())?;
         Ok(())
     }
