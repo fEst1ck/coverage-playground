@@ -35,6 +35,7 @@ pub use error::{FuzzerError, Result};
 const COVERAGE_SHM_BASE: &str = "/tmp/coverage_shm";
 const COVERAGE_SHM_SIZE: usize = 512 * 1024 * 1024; // 512MB
 const LOG_INTERVAL_SECS: u64 = 30; // Log state every 30 seconds
+const GRAPH_INTERVAL_SECS: u64 = 60; // Write graph every 1 minute
 
 /// Test case representation
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,6 +67,8 @@ struct Stats {
     start_time: Option<Instant>,
     last_status_time: Option<Instant>,
     last_log_time: Option<Instant>,
+    /// Time of the last graph write
+    last_graph_time: Option<Instant>,
     last_new_finding_time: Option<Instant>,
     level: usize,
 }
@@ -77,6 +80,7 @@ impl Stats {
             start_time: Some(now),
             last_log_time: Some(now),
             last_new_finding_time: Some(now),
+            last_graph_time: Some(now),
             ..Default::default()
         }
     }
@@ -94,6 +98,14 @@ impl Stats {
     fn should_log_state(&self) -> bool {
         self.last_log_time
             .map(|t| t.elapsed() >= Duration::from_secs(LOG_INTERVAL_SECS))
+            .unwrap_or(true)
+    }
+
+    /// Check if we should write the coverage graph to a file
+    /// That is, if the last graph write was more than GRAPH_INTERVAL_SECS seconds ago
+    fn should_write_graph(&self) -> bool {
+        self.last_graph_time
+            .map(|t| t.elapsed() >= Duration::from_secs(GRAPH_INTERVAL_SECS))
             .unwrap_or(true)
     }
 }
@@ -419,7 +431,8 @@ impl Fuzzer {
 
         self.update_status_screen();
         self.log_fuzzing_progress()?;
-
+        self.write_coverage_graph()?;
+        
         let cov_feedback = self.coverage.update_from_path(&path);
 
         Ok((path, cov_feedback))
@@ -737,6 +750,59 @@ impl Fuzzer {
             let full_cov_path = self.stats_dir.join(filename);
             let mut file = File::create(&full_cov_path)?;
             file.write_all(serde_json::to_string_pretty(&cov)?.as_bytes())?;
+        }
+        Ok(())
+    }
+
+    /// Generate a graphviz dot graph where the nodes are blocks, and edges are directed
+    /// from the source block to the target block
+    /// Each node is labeled with count from the block coverage metric
+    /// Each edge is labeled with count from the edge coverage metric
+    fn get_coverage_graph(&self) -> String {
+        let mut dot = String::from("digraph coverage {\n");
+
+        // Get coverage counts
+        let full_cov = self.coverage.full_cov();
+        let block_counts = full_cov.get("block").unwrap();
+        let edge_counts = full_cov.get("edge").unwrap();
+
+        // Add nodes with block counts
+        for elem in block_counts.as_array().unwrap() {
+            let block_id = elem[0].as_u64().unwrap();
+            let count = elem[1].as_u64().unwrap();
+            dot.push_str(&format!(
+                "    {} [label=\"{} ({})\"];\n",
+                block_id, block_id, count
+            ));
+        }
+
+        // Add edges with edge counts
+        for elem in edge_counts.as_array().unwrap() {
+            let src = elem[0].as_u64().unwrap();
+            let dst = elem[1].as_u64().unwrap();
+            let count = elem[2].as_u64().unwrap();
+            dot.push_str(&format!(
+                        "    {} -> {} [label=\"{}\"];\n",
+                src, dst, count
+            ));
+        }
+
+        dot.push_str("}\n");
+        dot
+    }
+
+    /// Write the coverage graph to a `coverage.dot` file under the stats directory
+    fn _write_coverage_graph(&self) -> Result<()> {
+        let dot = self.get_coverage_graph();
+        let mut file = File::create(&self.stats_dir.join("coverage.dot"))?;
+        file.write_all(dot.as_bytes())?;
+        Ok(())
+    }
+
+    fn write_coverage_graph(&mut self) -> Result<()> {
+        if self.stats.should_write_graph() {
+            self._write_coverage_graph()?;
+            self.stats.last_graph_time = Some(Instant::now());
         }
         Ok(())
     }
