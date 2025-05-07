@@ -24,10 +24,12 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 
 use crate::{
-    analyzer::Analyzer, cli::Args, coverage::{
+    analyzer::Analyzer,
+    cli::Args,
+    coverage::{
         get_coverage_metric_by_name, get_metric_priority, CoverageFeedback, CoverageMetric,
         CoverageMetricAggregator,
-    }
+    },
 };
 pub use error::{FuzzerError, Result};
 
@@ -793,7 +795,19 @@ impl Fuzzer {
         let block_counts = full_cov.get("block").unwrap();
         let edge_counts = full_cov.get("edge").unwrap();
         let fun_coverage = analyzer.analyze_fun_coverage(block_counts, edge_counts);
-        analyzer.write_fun_coverage(&fun_coverage, &self.stats_dir.join("fun_coverage.dot").to_str().unwrap()).unwrap()
+        analyzer
+            .write_fun_coverage(
+                &fun_coverage,
+                &self
+                    .stats_dir
+                    .join(format!(
+                        "fun_coverage_{}.dot",
+                        self.stats.start_time.unwrap().elapsed().as_secs()
+                    ))
+                    .to_str()
+                    .unwrap(),
+            )
+            .unwrap()
     }
 
     /// Write the coverage graph to a `coverage.dot` file under the stats directory
