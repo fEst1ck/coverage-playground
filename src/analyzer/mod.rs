@@ -167,7 +167,7 @@ impl FunctionCoverage {
             let color = {
                 // Color gradient from light green to dark red based on relative execution count
                 let intensity = 
-                    (num_exec_per_fun as f32 / self.max_exec_per_fun as f32 * 0.7 + 0.3) as f32;
+                    (num_exec_per_fun as f32 / self.max_exec_per_fun as f32 * 0.7) as f32;
                 // Convert intensity to RGB values: green (0,1,0) to red (1,0,0)
                 let r = (intensity * 255.0) as u8;
                 let g = ((1.0 - intensity) * 255.0) as u8;
