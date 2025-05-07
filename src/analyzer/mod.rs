@@ -139,6 +139,17 @@ impl EachFunctionCoverage {
             ..Default::default()
         }
     }
+
+    fn to_json(&self) -> Value {
+        let mut obj = serde_json::Map::new();
+        obj.insert("name".to_string(), Value::String(self.name.clone()));
+        obj.insert("nums_executed".to_string(), Value::Number(self.nums_executed.into()));
+        obj.insert("unique_blocks".to_string(), Value::Number(self.unique_blocks.len().into()));
+        obj.insert("cummulative_block_cov".to_string(), Value::Number(self.cummulative_block_cov.into()));
+        obj.insert("unique_edges".to_string(), Value::Number(self.unique_edges.len().into())); 
+        obj.insert("cummulative_edge_cov".to_string(), Value::Number(self.cummulative_edge_cov.into()));
+        Value::Object(obj)
+    }
 }
 
 pub struct FunctionCoverage {
@@ -153,6 +164,14 @@ impl FunctionCoverage {
             coverage: FxHashMap::default(),
             max_exec_per_fun: 0,
         }
+    }
+
+    pub fn to_json(&self) -> Value {
+        let mut vec = Vec::new();
+        for (_fun_id, coverage) in &self.coverage {
+            vec.push(coverage.to_json());
+        }
+        Value::Array(vec)
     }
 
     /// Generate a Graphviz DOT visualization of the function coverage

@@ -789,6 +789,21 @@ impl Fuzzer {
         dot
     }
 
+    fn _write_coverage_graph2(&self) -> Result<()> {
+        let analyzer = Analyzer::default();
+        let full_cov = self.coverage.full_cov();
+        let block_counts = full_cov.get("block").unwrap();
+        let edge_counts = full_cov.get("edge").unwrap();
+        let fun_coverage = analyzer.analyze_fun_coverage(block_counts, edge_counts);
+        let json = fun_coverage.to_json();
+        let mut file = File::create(format!(
+            "fun_coverage_{}.json",
+            self.stats.start_time.unwrap().elapsed().as_secs()
+        ))?;
+        file.write_all(serde_json::to_string_pretty(&json).unwrap().as_bytes())?;
+        Ok(())
+    }
+
     fn _write_coverage_graph1(&self) {
         let analyzer = Analyzer::default();
         let full_cov = self.coverage.full_cov();
@@ -824,7 +839,7 @@ impl Fuzzer {
     fn write_coverage_graph(&mut self) -> Result<()> {
         if self.stats.should_write_graph() {
             // self._write_coverage_graph()?;
-            self._write_coverage_graph1();
+            self._write_coverage_graph2()?;
             self.stats.last_graph_time = Some(Instant::now());
         }
         Ok(())
