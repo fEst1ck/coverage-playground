@@ -166,16 +166,13 @@ impl FunctionCoverage {
             let num_exec_per_fun = coverage.nums_executed;
             let color = {
                 // Color gradient from light green to dark red based on relative execution count
-                let intensity = if self.max_exec_per_fun > 0 {
-                    (num_exec_per_fun as f32 / self.max_exec_per_fun as f32 * 0.7 + 0.3) as f32
-                } else {
-                    0.3 // Lightest green if no executions
-                };
+                let intensity = 
+                    (num_exec_per_fun as f32 / self.max_exec_per_fun as f32 * 0.7 + 0.3) as f32;
                 // Convert intensity to RGB values: green (0,1,0) to red (1,0,0)
-                let r = intensity;
-                let g = 1.0 - intensity;
-                let b = 0.0;
-                format!("{:.3} {:.3} {:.3}", r, g, b)
+                let r = (intensity * 255.0) as u8;
+                let g = ((1.0 - intensity) * 255.0) as u8;
+                let b = 0u8;
+                format!("#{:02x}{:02x}{:02x}", r, g, b)
             };
 
             let label = format!(
