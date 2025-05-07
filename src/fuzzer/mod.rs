@@ -24,11 +24,10 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 
 use crate::{
-    cli::Args,
-    coverage::{
+    analyzer::Analyzer, cli::Args, coverage::{
         get_coverage_metric_by_name, get_metric_priority, CoverageFeedback, CoverageMetric,
         CoverageMetricAggregator,
-    },
+    }
 };
 pub use error::{FuzzerError, Result};
 
@@ -781,27 +780,37 @@ impl Fuzzer {
             let src = elem[0].as_u64().unwrap();
             let dst = elem[1].as_u64().unwrap();
             let count = elem[2].as_u64().unwrap();
-            dot.push_str(&format!(
-                        "    {} -> {} [label=\"{}\"];\n",
-                src, dst, count
-            ));
+            dot.push_str(&format!("    {} -> {} [label=\"{}\"];\n", src, dst, count));
         }
 
         dot.push_str("}\n");
         dot
     }
 
+    fn _write_coverage_graph1(&self) {
+        let analyzer = Analyzer::default();
+        let full_cov = self.coverage.full_cov();
+        let block_counts = full_cov.get("block").unwrap();
+        let edge_counts = full_cov.get("edge").unwrap();
+        let fun_coverage = analyzer.analyze_fun_coverage(block_counts, edge_counts);
+        analyzer.write_fun_coverage(&fun_coverage, &self.stats_dir.join("fun_coverage.dot").to_str().unwrap()).unwrap()
+    }
+
     /// Write the coverage graph to a `coverage.dot` file under the stats directory
     fn _write_coverage_graph(&self) -> Result<()> {
         let dot = self.get_coverage_graph();
-        let mut file = File::create(&self.stats_dir.join(format!("coverage_{}.dot", self.stats.start_time.unwrap().elapsed().as_secs())))?;
+        let mut file = File::create(&self.stats_dir.join(format!(
+            "coverage_{}.dot",
+            self.stats.start_time.unwrap().elapsed().as_secs()
+        )))?;
         file.write_all(dot.as_bytes())?;
         Ok(())
     }
 
     fn write_coverage_graph(&mut self) -> Result<()> {
         if self.stats.should_write_graph() {
-            self._write_coverage_graph()?;
+            // self._write_coverage_graph()?;
+            self._write_coverage_graph1();
             self.stats.last_graph_time = Some(Instant::now());
         }
         Ok(())
