@@ -796,10 +796,10 @@ impl Fuzzer {
         let edge_counts = full_cov.get("edge").unwrap();
         let fun_coverage = analyzer.analyze_fun_coverage(block_counts, edge_counts);
         let json = fun_coverage.to_json();
-        let mut file = File::create(format!(
+        let mut file = File::create(&self.stats_dir.join(format!(
             "fun_coverage_{}.json",
             self.stats.start_time.unwrap().elapsed().as_secs()
-        ))?;
+        )))?;
         file.write_all(serde_json::to_string_pretty(&json).unwrap().as_bytes())?;
         Ok(())
     }
