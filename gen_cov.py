@@ -277,7 +277,7 @@ def generate_time_series_report(input_dir: str, output_dir: str):
                 "data": {
                     "id": str(bid),
                     "label": f"Block {bid}\nExecs: {block_exec_map[bid]}",
-                    "execs": block_exec_map[bid]
+                    "execs": int(block_exec_map[bid])
                 }
             } for bid in covered_blocks]
             edges = [{"data": {"source": str(src), "target": str(dst)}} for src, dst in fn["unique_edges"] if src in covered_blocks and dst in covered_blocks]
