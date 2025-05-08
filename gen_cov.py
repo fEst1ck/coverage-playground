@@ -14,6 +14,9 @@ INDEX_HTML_TEMPLATE = """
     <meta charset="utf-8">
     <title>Coverage Report</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.css">
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script type="text/javascript" src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.js"></script>
 </head>
 <body>
 <h1>Coverage Summary</h1>
@@ -22,7 +25,7 @@ INDEX_HTML_TEMPLATE = """
 <input type="range" min="0" max="{{ max_idx }}" value="0" id="time-slider">
 <span id="time-label">{{ times[0] }}</span>
 
-<table>
+<table id="coverage-table">
     <thead>
         <tr>
             <th>Function</th>
@@ -37,48 +40,50 @@ INDEX_HTML_TEMPLATE = """
 <script>
 const snapshots = {{ snapshots_json | safe }};
 const times = {{ times | safe }};
+let dataTable;
+let currentPage = 0;
+let currentLength = 25;
 
 function loadSnapshot(idx) {
-    const tbody = document.getElementById('table-body');
-    tbody.innerHTML = '';
-
     const snapshot = snapshots[idx];
     if (!snapshot || snapshot.length === 0) {
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.colSpan = 4;
-        td.textContent = "No functions in this snapshot";
-        tr.appendChild(td);
-        tbody.appendChild(tr);
+        if (dataTable) {
+            dataTable.clear();
+            dataTable.row.add(['No functions in this snapshot', '', '', '']).draw(false);
+        }
         return;
     }
 
-    for (const fn of snapshot) {
-        if (!fn || !fn.name) continue;
-
-        const tr = document.createElement('tr');
-
-        const tdName = document.createElement('td');
-        const a = document.createElement('a');
-        a.href = `function.html?name=${encodeURIComponent(fn.name)}&t=${times[idx]}`;
-        a.textContent = fn.name;
-        tdName.appendChild(a);
-
-        const tdBlocks = document.createElement('td');
-        tdBlocks.textContent = fn.num_blocks;
-
-        const tdEdges = document.createElement('td');
-        tdEdges.textContent = fn.num_edges;
-
-        const tdExecs = document.createElement('td');
-        tdExecs.textContent = fn.execs;
-
-        tr.appendChild(tdName);
-        tr.appendChild(tdBlocks);
-        tr.appendChild(tdEdges);
-        tr.appendChild(tdExecs);
-        tbody.appendChild(tr);
+    // Clear existing data
+    if (dataTable) {
+        dataTable.clear();
+    } else {
+        // Initialize DataTable if it doesn't exist
+        dataTable = $('#coverage-table').DataTable({
+            order: [[0, 'asc']], // Sort by function name by default
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
+            columnDefs: [
+                { targets: 0, type: 'string' },
+                { targets: [1, 2, 3], type: 'num' }
+            ]
+        });
     }
+
+    // Add new data
+    snapshot.forEach(fn => {
+        if (!fn || !fn.name) return;
+        const nameLink = `<a href="function.html?name=${encodeURIComponent(fn.name)}&t=${times[idx]}">${fn.name}</a>`;
+        dataTable.row.add([
+            nameLink,
+            fn.num_blocks,
+            fn.num_edges,
+            fn.execs
+        ]);
+    });
+
+    // Draw and preserve current page
+    dataTable.draw(false);
 }
 
 document.getElementById('time-slider').addEventListener('input', function () {
@@ -150,6 +155,14 @@ function loadGraph(name, t) {
                     rankSep: 100
                 },
                 style: [
+                    {
+                        selector: 'node[execs = 0]',
+                        style: {
+                            'background-color': '#cccccc', // light gray
+                            'color': '#333',
+                            'border-color': '#999'
+                        }
+                    },
                     {
                         selector: 'node',
                         style: {
@@ -260,7 +273,13 @@ def generate_time_series_report(input_dir: str, output_dir: str):
             block_exec_map = {bid: count for bid, count in fn["unique_blocks"]}
             covered_blocks = set(block_exec_map.keys())
 
-            nodes = [{"data": {"id": str(bid), "label": f"Block {bid}\nExecs: {block_exec_map[bid]}"}} for bid in covered_blocks]
+            nodes = [{
+                "data": {
+                    "id": str(bid),
+                    "label": f"Block {bid}\nExecs: {block_exec_map[bid]}",
+                    "execs": block_exec_map[bid]
+                }
+            } for bid in covered_blocks]
             edges = [{"data": {"source": str(src), "target": str(dst)}} for src, dst in fn["unique_edges"] if src in covered_blocks and dst in covered_blocks]
 
             safe_name = safe_filename(name)
