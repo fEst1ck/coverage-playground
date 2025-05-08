@@ -156,14 +156,6 @@ function loadGraph(name, t) {
                 },
                 style: [
                     {
-                        selector: 'node[execs = 0]',
-                        style: {
-                            'background-color': '#cccccc', // light gray
-                            'color': '#333',
-                            'border-color': '#999'
-                        }
-                    },
-                    {
                         selector: 'node',
                         style: {
                             'label': 'data(label)',
@@ -178,6 +170,14 @@ function loadGraph(name, t) {
                             'shape': 'roundrectangle',
                             'width': 'label',
                             'height': 'label'
+                        }
+                    },
+                    {
+                        selector: 'node[execs = 0]',
+                        style: {
+                            'background-color': '#cccccc', // light gray
+                            'color': '#333',
+                            'border-color': '#999'
                         }
                     },
                     {
