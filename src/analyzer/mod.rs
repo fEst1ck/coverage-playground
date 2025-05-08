@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 struct ControlFlowGraphInfo {
     fun_id_to_name: FxHashMap<u32, String>,
     block_id_to_fun_id: FxHashMap<u32, u32>,
+    fun_id_to_all_blocks: FxHashMap<u32, BTreeSet<u32>>,
 }
 
 impl ControlFlowGraphInfo {
@@ -20,6 +21,7 @@ impl ControlFlowGraphInfo {
     pub fn from_json(path: &str) -> Self {
         let mut fun_id_to_name = FxHashMap::default();
         let mut block_id_to_fun_id = FxHashMap::default();
+        let mut fun_id_to_all_blocks = FxHashMap::default();
         let modules = parse_json_file(path).unwrap();
         for module in modules {
             for func in module.functions {
@@ -29,12 +31,14 @@ impl ControlFlowGraphInfo {
                 );
                 for block in func.all_blocks {
                     block_id_to_fun_id.insert(block, func.entry_block);
+                    fun_id_to_all_blocks.entry(func.entry_block).or_insert(BTreeSet::new()).insert(block);
                 }
             }
         }
         Self {
             fun_id_to_name,
             block_id_to_fun_id,
+            fun_id_to_all_blocks,
         }
     }
 }
@@ -102,6 +106,14 @@ impl Analyzer {
             .map(|coverage| coverage.nums_executed)
             .max()
             .unwrap_or(0);
+
+        for (fun_id, coverage) in &mut fun_coverage.coverage {
+            let all_blocks = &self.control_flow_graph_info.fun_id_to_all_blocks[fun_id];
+            for block in all_blocks {
+                coverage.unique_blocks.entry(*block).or_insert(0);
+            }
+        }
+
         fun_coverage
     }
 
