@@ -1,8 +1,13 @@
-use std::{fs::File, io::Write};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs::File,
+    io::Write,
+};
 
+use itertools::Itertools;
 use path_reduction::json_parser::parse_json_file;
-use rustc_hash::{FxHashMap, FxHashSet};
-use serde_json::Value;
+use rustc_hash::FxHashMap;
+use serde_json::{json, Value};
 
 /// Control flow graph information of the target program
 struct ControlFlowGraphInfo {
@@ -50,7 +55,11 @@ impl Analyzer {
     /// Analyze the function coverage information
     /// block_coverage: the coverage information of the blocks, an array of [block_id, count]
     /// edge_coverage: the coverage information of the edges, an array of [src, dst, count]
-    pub fn analyze_fun_coverage(&self, block_coverage: &Value, edge_coverage: &Value) -> FunctionCoverage {
+    pub fn analyze_fun_coverage(
+        &self,
+        block_coverage: &Value,
+        edge_coverage: &Value,
+    ) -> FunctionCoverage {
         let mut fun_coverage = FunctionCoverage::new();
         // Add nodes with block counts
         for elem in block_coverage.as_array().unwrap() {
@@ -63,10 +72,8 @@ impl Analyzer {
                 .entry(fun_id)
                 .or_insert(EachFunctionCoverage::new(fun_name));
 
-            // update cummulative block coverage
-            entry.cummulative_block_cov += count;
             // update unique blocks covered
-            entry.unique_blocks.insert(block_id);
+            *entry.unique_blocks.entry(block_id).or_default() += count;
             // update number of times the function was executed
             // which is the number of times the first block of the function was executed
             if let Some(name) = self.control_flow_graph_info.fun_id_to_name.get(&block_id) {
@@ -79,15 +86,13 @@ impl Analyzer {
         for elem in edge_coverage.as_array().unwrap() {
             let src = elem[0].as_u64().unwrap() as u32;
             let dst = elem[1].as_u64().unwrap() as u32;
-            let count = elem[2].as_u64().unwrap() as usize;
+            let _count = elem[2].as_u64().unwrap() as usize;
             let fun_id = self.control_flow_graph_info.block_id_to_fun_id[&src];
             let fun_name = self.control_flow_graph_info.fun_id_to_name[&fun_id].clone();
             let entry = fun_coverage
                 .coverage
                 .entry(fun_id)
                 .or_insert(EachFunctionCoverage::new(fun_name));
-            // update cummulative edge coverage
-            entry.cummulative_edge_cov += count;
             // update unique edges covered
             entry.unique_edges.insert((src, dst));
         }
@@ -100,9 +105,17 @@ impl Analyzer {
         fun_coverage
     }
 
-    pub fn write_fun_coverage(&self, fun_coverage: &FunctionCoverage, path: &str) -> std::io::Result<()> {
+    pub fn write_fun_coverage(
+        &self,
+        fun_coverage: &FunctionCoverage,
+        path: &str,
+    ) -> std::io::Result<()> {
         let mut file = File::create(path)?;
-        file.write_all(fun_coverage.generate_dot(&self.control_flow_graph_info).as_bytes())?;
+        file.write_all(
+            fun_coverage
+                .generate_dot(&self.control_flow_graph_info)
+                .as_bytes(),
+        )?;
         Ok(())
     }
 }
@@ -123,13 +136,10 @@ struct EachFunctionCoverage {
     /// Number of times the function was executed
     nums_executed: usize,
     /// unique blocks covered
-    unique_blocks: FxHashSet<u32>,
-    /// Number of cummulative blocks covered
-    cummulative_block_cov: usize,
+    /// Maps block id to the number of times it was executed
+    unique_blocks: BTreeMap<u32, usize>,
     /// unique edges covered
-    unique_edges: FxHashSet<(u32, u32)>,
-    /// Number of cummulative edges covered
-    cummulative_edge_cov: usize,
+    unique_edges: BTreeSet<(u32, u32)>,
 }
 
 impl EachFunctionCoverage {
@@ -141,14 +151,12 @@ impl EachFunctionCoverage {
     }
 
     fn to_json(&self) -> Value {
-        let mut obj = serde_json::Map::new();
-        obj.insert("name".to_string(), Value::String(self.name.clone()));
-        obj.insert("nums_executed".to_string(), Value::Number(self.nums_executed.into()));
-        obj.insert("unique_blocks".to_string(), Value::Number(self.unique_blocks.len().into()));
-        obj.insert("cummulative_block_cov".to_string(), Value::Number(self.cummulative_block_cov.into()));
-        obj.insert("unique_edges".to_string(), Value::Number(self.unique_edges.len().into())); 
-        obj.insert("cummulative_edge_cov".to_string(), Value::Number(self.cummulative_edge_cov.into()));
-        Value::Object(obj)
+        json!({
+            "name": self.name.clone(),
+            "nums_executed": self.nums_executed,
+            "unique_blocks": self.unique_blocks.iter().map(|(block, count)| json!([*block as u64, *count as u64])).collect_vec(),
+            "unique_edges": self.unique_edges.iter().map(|&(src, dst)| json!([src, dst])).collect_vec(),
+        })
     }
 }
 
@@ -185,8 +193,7 @@ impl FunctionCoverage {
             let num_exec_per_fun = coverage.nums_executed;
             let color = {
                 // Color gradient from light green to dark red based on relative execution count
-                let intensity = 
-                    (num_exec_per_fun as f32 / self.max_exec_per_fun as f32) as f32;
+                let intensity = (num_exec_per_fun as f32 / self.max_exec_per_fun as f32) as f32;
                 // Convert intensity to RGB values: green (0,1,0) to red (1,0,0)
                 let r = (intensity * 255.0) as u8;
                 let g = ((1.0 - intensity) * 255.0) as u8;
@@ -195,13 +202,11 @@ impl FunctionCoverage {
             };
 
             let label = format!(
-                "{}\nExecutions: {}\nBlocks: {}/{}\nEdges: {}/{}",
+                "{}\nExecutions: {}\nBlocks: {}\nEdges: {}",
                 coverage.name,
                 coverage.nums_executed,
                 coverage.unique_blocks.len(),
-                coverage.cummulative_block_cov,
                 coverage.unique_edges.len(),
-                coverage.cummulative_edge_cov
             );
 
             dot.push_str(&format!(
@@ -224,7 +229,11 @@ impl FunctionCoverage {
     }
 
     /// Write the function coverage visualization to a DOT file
-    pub fn write_dot_file(&self, path: &str, control_flow_graph_info: &ControlFlowGraphInfo) -> std::io::Result<()> {
+    pub fn write_dot_file(
+        &self,
+        path: &str,
+        control_flow_graph_info: &ControlFlowGraphInfo,
+    ) -> std::io::Result<()> {
         use std::fs::File;
         use std::io::Write;
         let dot = self.generate_dot(control_flow_graph_info);
