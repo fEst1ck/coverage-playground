@@ -122,6 +122,7 @@ FUNCTION_HTML_TEMPLATE = """
 <div id="cy" style="width: 100%; height: 85vh;"></div>
 
 <script>
+let nodePositions = {};
 function getParam(name) {
     const params = new URLSearchParams(window.location.search);
     return params.get(name);
@@ -143,17 +144,26 @@ function loadGraph(name, t) {
     fetch("graphs/" + t + "/" + safeName + ".json")
         .then(response => response.json())
         .then(data => {
-            document.getElementById("title").innerText = name + " @ t=" + t;
-            cytoscape({
+            // Inject saved positions if available
+            data.forEach(ele => {
+                if (ele.data && nodePositions[ele.data.id]) {
+                    ele.position = nodePositions[ele.data.id];
+                }
+            });
+
+            const usePreset = Object.keys(nodePositions).length > 0;
+            const cy = cytoscape({
                 container: document.getElementById('cy'),
                 elements: data,
-                layout: {
-                    name: 'dagre',
-                    rankDir: 'TB',
-                    nodeSep: 70,
-                    edgeSep: 30,
-                    rankSep: 100
-                },
+                layout: usePreset
+                    ? { name: 'preset' }
+                    : {
+                        name: 'dagre',
+                        rankDir: 'TB',
+                        nodeSep: 70,
+                        edgeSep: 30,
+                        rankSep: 100
+                    },
                 style: [
                     {
                         selector: 'node',
@@ -191,6 +201,16 @@ function loadGraph(name, t) {
                         }
                     }
                 ]
+            });
+
+            // After layout, save node positions
+            cy.ready(function() {
+                cy.nodes().forEach(node => {
+                    nodePositions[node.id()] = {
+                        x: node.position('x'),
+                        y: node.position('y')
+                    };
+                });
             });
         });
 }
