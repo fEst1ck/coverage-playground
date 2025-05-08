@@ -287,7 +287,7 @@ def generate_time_series_report(input_dir: str, output_dir: str):
 
             snapshot_summary.append({
                 "name": name,
-                "num_blocks": len(block_exec_map),
+                "num_blocks": sum(1 for count in block_exec_map.values() if count > 0),
                 "num_edges": len(edges),
                 "execs": fn["nums_executed"]
             })
