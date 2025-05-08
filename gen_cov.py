@@ -6,6 +6,7 @@ import shutil
 import urllib.parse
 from pathlib import Path
 from jinja2 import Template
+import hashlib
 
 INDEX_HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -139,8 +140,25 @@ slider.value = currentIndex;
 label.textContent = times[currentIndex];
 
 function loadGraph(name, t) {
-    const safeName = encodeURIComponent(name);
-    fetch("graphs/" + t + "/" + safeName + ".json")
+    const graphDir = "graphs/" + t + "/";
+    const nameMapUrl = graphDir + "name_map.json";
+    fetch(nameMapUrl)
+        .then(resp => resp.json())
+        .then(nameMap => {
+            // Find the hash for this function name
+            let hash = null;
+            for (const [h, original] of Object.entries(nameMap)) {
+                if (original === name) {
+                    hash = h;
+                    break;
+                }
+            }
+            if (!hash) {
+                alert("Function not found in mapping!");
+                throw new Error("Function not found in mapping");
+            }
+            return fetch(graphDir + hash + ".json");
+        })
         .then(response => response.json())
         .then(data => {
             document.getElementById("title").innerText = name + " @ t=" + t;
@@ -241,6 +259,9 @@ a {
 def safe_filename(name: str) -> str:
     return urllib.parse.quote(name, safe="")
 
+def hash_name(name: str) -> str:
+    return hashlib.sha1(name.encode('utf-8')).hexdigest()
+
 def generate_time_series_report(input_dir: str, output_dir: str):
     input_path = Path(input_dir)
     output_path = Path(output_dir)
@@ -268,8 +289,10 @@ def generate_time_series_report(input_dir: str, output_dir: str):
         snapshot_summary = []
         time_dir = graph_dir / str(time)
         time_dir.mkdir(parents=True, exist_ok=True)
+        name_map = {}
         for fn in data:
             name = fn["name"]
+            h = hash_name(name)
             block_exec_map = {bid: count for bid, count in fn["unique_blocks"]}
             covered_blocks = set(block_exec_map.keys())
 
@@ -282,8 +305,8 @@ def generate_time_series_report(input_dir: str, output_dir: str):
             } for bid in covered_blocks]
             edges = [{"data": {"source": str(src), "target": str(dst)}} for src, dst in fn["unique_edges"] if src in covered_blocks and dst in covered_blocks]
 
-            safe_name = safe_filename(name)
-            (time_dir / f"{safe_name}.json").write_text(json.dumps(nodes + edges, indent=2))
+            (time_dir / f"{h}.json").write_text(json.dumps(nodes + edges, indent=2))
+            name_map[h] = name
 
             snapshot_summary.append({
                 "name": name,
@@ -291,6 +314,8 @@ def generate_time_series_report(input_dir: str, output_dir: str):
                 "num_edges": len(edges),
                 "execs": fn["nums_executed"]
             })
+        # Write the mapping file for this snapshot
+        (time_dir / "name_map.json").write_text(json.dumps(name_map, indent=2, ensure_ascii=False))
 
         snapshots.append(snapshot_summary)
         times.append(time)
