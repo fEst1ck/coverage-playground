@@ -377,8 +377,15 @@ def generate_comparison_report(input_dirs: list[str], output_dir: str):
             h = hash_name(name)
             fn1 = data1.get(name)
             fn2 = data2.get(name)
-            blocks1 = {bid: count for bid, count in fn1["unique_blocks"]}
-            blocks2 = {bid: count for bid, count in fn2["unique_blocks"]}
+            if fn1 is None:
+                blocks2 = {bid: count for bid, count in fn2["unique_blocks"]}
+                blocks1 = {bid: 0 for bid, _count in fn2["unique_blocks"]}
+            elif fn2 is None:
+                blocks1 = {bid: count for bid, count in fn1["unique_blocks"]}
+                blocks2 = {bid: 0 for bid, _count in fn1["unique_blocks"]}
+            else:
+                blocks1 = {bid: count for bid, count in fn1["unique_blocks"]}
+                blocks2 = {bid: count for bid, count in fn2["unique_blocks"]}
             bids = set(blocks1.keys()) | set(blocks2.keys())
             block_exec_map = dict()
             for bid in bids:
