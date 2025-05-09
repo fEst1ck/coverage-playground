@@ -28,7 +28,8 @@ INDEX_HTML_TEMPLATE1 = """
 <input type="range" min="0" max="{{ max_idx }}" value="0" id="time-slider">
 <span id="time-label">{{ times[0] }}</span>
 
-<table id="coverage-table">
+<div style="overflow-x:auto;">
+  <table id="coverage-table">
     <thead>
         <tr>
             <th>Function</th>
@@ -38,7 +39,8 @@ INDEX_HTML_TEMPLATE1 = """
         </tr>
     </thead>
     <tbody id="table-body"></tbody>
-</table>
+  </table>
+</div>
 
 <script>
 const snapshots = {{ snapshots_json | safe }};
@@ -256,6 +258,34 @@ a {
     color: #0074D9;
     text-decoration: none;
 }
+
+/* Make the table horizontally scrollable if needed */
+table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    width: 100%;
+    max-width: 100vw;
+    background: white;
+}
+
+/* Prevent table from stretching too wide */
+th, td {
+    max-width: 220px;
+    min-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Responsive: shrink font size for big tables */
+@media (max-width: 900px) {
+    th, td {
+        font-size: 12px;
+        min-width: 60px;
+        max-width: 120px;
+    }
+}
 """
 
 def safe_filename(name: str) -> str:
@@ -470,7 +500,8 @@ INDEX_HTML_TEMPLATE2 = """
 <input type="range" min="0" max="{{ max_idx }}" value="0" id="time-slider">
 <span id="time-label">{{ times[0] }}</span>
 
-<table id="coverage-table">
+<div style="overflow-x:auto;">
+  <table id="coverage-table">
     <thead>
         <tr>
             <th>Function</th>
@@ -483,7 +514,8 @@ INDEX_HTML_TEMPLATE2 = """
         </tr>
     </thead>
     <tbody id="table-body"></tbody>
-</table>
+  </table>
+</div>
 
 <script>
 const snapshots = {{ snapshots_json | safe }};
@@ -511,6 +543,7 @@ function loadSnapshot(idx) {
         const a = document.createElement('a');
         a.href = `function.html?name=${encodeURIComponent(fn.name)}&t=${times[idx]}`;
         a.textContent = fn.name;
+        a.title = fn.name;
         const tdName = document.createElement('td');
         tdName.appendChild(a);
 
