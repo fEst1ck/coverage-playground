@@ -433,8 +433,8 @@ def generate_comparison_report(input_dirs: list[str], output_dir: str):
                 "num_blocks1": sum(1 for count in block_exec_map.values() if count[1] > 0),
                 "num_edges0": len(edges1),
                 "num_edges1": len(edges2),
-                "execs0": fn1["nums_executed"],
-                "execs1": fn2["nums_executed"]
+                "execs0": fn1["nums_executed"] if fn1 else 0,
+                "execs1": fn2["nums_executed"] if fn2 else 0
             })
         # Write the mapping file for this snapshot
         (time_dir / "name_map.json").write_text(json.dumps(name_map, indent=2, ensure_ascii=False))
