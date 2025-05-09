@@ -7,7 +7,7 @@ import urllib.parse
 from pathlib import Path
 from jinja2 import Template
 import hashlib
-
+import itertools
 INDEX_HTML_TEMPLATE1 = """
 <!DOCTYPE html>
 <html>
@@ -372,11 +372,7 @@ def generate_comparison_report(input_dirs: list[str], output_dir: str):
         time_dir = graph_dir / str(time1)
         time_dir.mkdir(parents=True, exist_ok=True)
         name_map = {}
-        names = set()
-        from itertools import chain
-        for fn in chain(data1, data2):
-            names.add(fn["name"])
-        
+        names = set(itertools.chain(data1.keys(), data2.keys()))
         for name in names:
             h = hash_name(name)
             fn1 = data1.get(name)
