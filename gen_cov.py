@@ -305,7 +305,7 @@ def generate_time_series_report(input_dir: str, output_dir: str):
                     "execs": int(block_exec_map[bid])
                 }
             } for bid in covered_blocks]
-            edges = [{"data": {"source": str(src), "target": str(dst)}} for src, dst in fn["unique_edges"] if src in covered_blocks]
+            edges = [{"data": {"source": str(src), "target": str(dst)}} for src, dst in fn["unique_edges"] if src in covered_blocks and dst in covered_blocks]
 
             (time_dir / f"{h}.json").write_text(json.dumps(nodes + edges, indent=2))
             name_map[h] = name
@@ -415,8 +415,8 @@ def generate_comparison_report(input_dirs: list[str], output_dir: str):
                     "color": node_color(bid)
                 }
             } for bid in bids]
-            edges1 = { (src, dst) for src, dst in fn1["unique_edges"]} if fn1 else set()
-            edges2 = { (src, dst) for src, dst in fn2["unique_edges"]} if fn2 else set()
+            edges1 = { (src, dst) for src, dst in fn1["unique_edges"] if src in bids and dst in bids } if fn1 else set()
+            edges2 = { (src, dst) for src, dst in fn2["unique_edges"] if src in bids and dst in bids } if fn2 else set()
             edges_1_only = edges1 - edges2
             edges_2_only = edges2 - edges1
             edges_both = edges1 & edges2
