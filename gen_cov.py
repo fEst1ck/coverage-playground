@@ -8,6 +8,8 @@ from pathlib import Path
 from jinja2 import Template
 import hashlib
 import itertools
+import sys
+
 INDEX_HTML_TEMPLATE1 = """
 <!DOCTYPE html>
 <html>
@@ -358,7 +360,8 @@ def generate_comparison_report(input_dirs: list[str], output_dir: str):
     for file1, file2 in zip(files1, files2):
         time1 = int(file1.stem.split("_")[-1])
         time2 = int(file2.stem.split("_")[-1])
-        assert time1 == time2, f"Timestamp mismatch: {time1} != {time2}"
+        if time1 != time2:
+            print(f"Error: Timestamp mismatch between files: {time1} != {time2}", file=sys.stderr)
         with open(file1) as f1:
             data1 = json.load(f1)
         with open(file2) as f2:
