@@ -936,7 +936,10 @@ def generate_call_graph_report(input_dirs: list[str], output_dir: str):
         (time_dir / "call_graph.json").write_text(json.dumps(nodes + edges, indent=2))
         times.append(time1)
 
-    (output_path / "call_graph.html").write_text(CALL_GRAPH_HTML_TEMPLATE)
+    (output_path / "call_graph.html").write_text(Template(CALL_GRAPH_HTML_TEMPLATE).render(
+        times=times,
+        max_idx=len(times) - 1
+    ))
     (css_dir / "style.css").write_text(STYLE_CSS)
     (output_path / "times.js").write_text("const times = " + json.dumps(times) + ";")
     print(f"✅ Call graph comparison report generated at: {output_path.resolve()}")
