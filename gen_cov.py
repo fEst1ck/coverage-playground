@@ -860,7 +860,6 @@ def generate_call_graph_report(input_dirs: list[str], output_dir: str):
         nodes = []
         edges = []
         all_function_names = set(itertools.chain(data1.keys(), data2.keys()))
-        all_function_ids = set(fn["id"] for fn in data1) | set(fn["id"] for fn in data2)
 
         for name in all_function_names:
             fn1 = data1.get(name)
