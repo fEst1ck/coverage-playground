@@ -894,46 +894,44 @@ def generate_call_graph_report(input_dirs: list[str], output_dir: str):
             nodes.append({
                 "data": {
                     "id": id,
-                    "label": f"{name}\\nExecs: {execs1} / {execs2}",
+                    "label": f"{name}\nExecs: {execs1} / {execs2}",
                     "color": color
                 }
             })
 
-            existing_edges = set()
-            # Add edges for function calls
+            edges1 = set()
             if fn1:
                 for callee in fn1["calls"]:
-                    edges.append({
-                        "data": {
-                            "source": fn1["id"],
-                            "target": callee,
-                            "color": "#FF4136",  # Red for fuzzer 1
-                            "label": "F1"
-                        }
-                    })
-                    existing_edges.add((fn1["id"], callee))
-
+                    edges1.add((fn1["id"], callee))
+            edges2 = set()
             if fn2:
                 for callee in fn2["calls"]:
-                    if (fn2["id"], callee) in existing_edges:
-                        edges.append({
-                            "data": {
-                                "source": fn2["id"],
-                                "target": callee,
-                                "color": "#0074D9",  # Blue for both
-                                "label": "F2"
-                            }
-                        })
-                    else:
-                        edges.append({
-                            "data": {
-                                "source": fn2["id"],
-                                "target": callee,
-                                "color": "#2ECC40",  # Green for fuzzer 2
-                                "label": "F2"
-                            }
-                        })
-
+                    edges2.add((fn2["id"], callee))
+            for edge in edges1 - edges2:
+                edges.append({
+                    "data": {
+                        "source": edge[0],
+                        "target": edge[1],
+                        "color": "#FF4136",  # Red for fuzzer 1
+                    }
+                })
+            for edge in edges1 & edges2:
+                edges.append({
+                    "data": {
+                        "source": edge[0],
+                        "target": edge[1],
+                        "color": "#0074D9",  # Blue for both
+                    }
+                })
+            for edge in edges2 - edges1:
+                edges.append({
+                    "data": {
+                        "source": edge[0],
+                        "target": edge[1],
+                        "color": "#2ECC40",  # Green for fuzzer 2
+                    }
+                })
+            
         # Write the call graph for this timestamp
         (time_dir / "call_graph.json").write_text(json.dumps(nodes + edges, indent=2))
         times.append(time1)
