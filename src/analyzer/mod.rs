@@ -74,7 +74,7 @@ impl Analyzer {
             let entry = fun_coverage
                 .coverage
                 .entry(fun_id)
-                .or_insert(EachFunctionCoverage::new(fun_name));
+                .or_insert(EachFunctionCoverage::new(fun_id, fun_name));
 
             // update unique blocks covered
             *entry.unique_blocks.entry(block_id).or_default() += count;
@@ -96,9 +96,13 @@ impl Analyzer {
             let entry = fun_coverage
                 .coverage
                 .entry(fun_id)
-                .or_insert(EachFunctionCoverage::new(fun_name));
+                .or_insert(EachFunctionCoverage::new(fun_id, fun_name));
             // update unique edges covered
             entry.unique_edges.insert((src, dst));
+            // update callees
+            if self.control_flow_graph_info.fun_id_to_name.contains_key(&dst) {
+                entry.calls.push(dst);
+            }
         }
         fun_coverage.max_exec_per_fun = fun_coverage
             .coverage
@@ -141,8 +145,9 @@ impl Default for Analyzer {
 }
 
 /// Coverage information of each function
-#[derive(Default)]
 struct EachFunctionCoverage {
+    /// Function id
+    id: u32,
     /// Function name
     name: String,
     /// Number of times the function was executed
@@ -152,22 +157,30 @@ struct EachFunctionCoverage {
     unique_blocks: BTreeMap<u32, usize>,
     /// unique edges covered
     unique_edges: BTreeSet<(u32, u32)>,
+    /// other functions that are called by this function
+    calls: Vec<u32>,
 }
 
 impl EachFunctionCoverage {
-    fn new(name: String) -> Self {
+    fn new(id: u32, name: String) -> Self {
         Self {
+            id,
             name,
-            ..Default::default()
+            nums_executed: 0,
+            unique_blocks: BTreeMap::new(),
+            unique_edges: BTreeSet::new(),
+            calls: Vec::new(),
         }
     }
 
     fn to_json(&self) -> Value {
         json!({
+            "id": self.id,
             "name": self.name.clone(),
             "nums_executed": self.nums_executed,
             "unique_blocks": self.unique_blocks.iter().map(|(block, count)| json!([*block as u64, *count as u64])).collect_vec(),
             "unique_edges": self.unique_edges.iter().map(|&(src, dst)| json!([src, dst])).collect_vec(),
+            "calls": self.calls.clone(),
         })
     }
 }

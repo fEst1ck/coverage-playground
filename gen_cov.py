@@ -711,12 +711,248 @@ window.addEventListener("DOMContentLoaded", () => {
 </html>
 """
 
+CALL_GRAPH_HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Call Graph Comparison</title>
+    <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+    <script src="https://unpkg.com/dagre/dist/dagre.min.js"></script>
+    <script src="https://unpkg.com/cytoscape-dagre/cytoscape-dagre.js"></script>
+    <script src="times.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<h1 id="title">Call Graph Comparison</h1>
+<div>
+  <label for="time-slider">Timestamp:</label>
+  <input type="range" id="time-slider" />
+  <span id="time-label"></span>
+</div>
+<div id="cy" style="width: 100%; height: 85vh;"></div>
+
+<script>
+function getParam(name) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name);
+}
+let t = parseInt(getParam("t") || "0");
+
+const slider = document.getElementById("time-slider");
+const label = document.getElementById("time-label");
+slider.min = 0;
+slider.max = times.length - 1;
+let currentIndex = times.indexOf(t);
+if (currentIndex === -1) currentIndex = 0;
+slider.value = currentIndex;
+label.textContent = times[currentIndex];
+
+function loadGraph(t) {
+    const graphDir = "graphs/" + t + "/";
+    fetch(graphDir + "call_graph.json")
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById("title").innerText = "Call Graph Comparison @ t=" + t;
+            cytoscape({
+                container: document.getElementById('cy'),
+                elements: data,
+                layout: {
+                    name: 'dagre',
+                    rankDir: 'LR',
+                    nodeSep: 100,
+                    edgeSep: 50,
+                    rankSep: 150
+                },
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'label': 'data(label)',
+                            'background-color': 'data(color)',
+                            'color': '#fff',
+                            'text-valign': 'center',
+                            'text-halign': 'center',
+                            'text-wrap': 'wrap',
+                            'text-max-width': 120,
+                            'font-size': '12px',
+                            'padding': '8px',
+                            'shape': 'roundrectangle',
+                            'width': 'label',
+                            'height': 'label'
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 2,
+                            'line-color': 'data(color)',
+                            'target-arrow-shape': 'triangle',
+                            'target-arrow-color': 'data(color)',
+                            'curve-style': 'bezier',
+                            'label': 'data(label)',
+                            'font-size': '10px',
+                            'text-rotation': 'autorotate'
+                        }
+                    }
+                ]
+            });
+        });
+}
+
+slider.addEventListener("input", () => {
+    const idx = parseInt(slider.value);
+    const newTime = times[idx];
+    label.textContent = newTime;
+    loadGraph(newTime);
+});
+
+window.addEventListener("DOMContentLoaded", () => {
+    loadGraph(times[currentIndex]);
+});
+</script>
+</body>
+</html>
+"""
+
+def generate_call_graph_report(input_dirs: list[str], output_dir: str):
+    input_paths = [Path(input_dir) for input_dir in input_dirs]
+    output_path = Path(output_dir)
+    graph_dir = output_path / "graphs"
+    css_dir = output_path / "css"
+
+    if output_path.exists():
+        shutil.rmtree(output_path)
+    output_path.mkdir()
+    graph_dir.mkdir()
+    css_dir.mkdir()
+
+    times = []
+
+    files1 = sorted(
+        input_paths[0].glob("fun_coverage_*.json"),
+        key=lambda f: int(f.stem.split("_")[-1])
+    )
+
+    files2 = sorted(
+        input_paths[1].glob("fun_coverage_*.json"),
+        key=lambda f: int(f.stem.split("_")[-1])
+    )
+
+    for file1, file2 in zip(files1, files2):
+        time1 = int(file1.stem.split("_")[-1])
+        time2 = int(file2.stem.split("_")[-1])
+        if time1 != time2:
+            print(f"Error: Timestamp mismatch between files: {time1} != {time2}", file=sys.stderr)
+        with open(file1) as f1:
+            data1 = json.load(f1)
+        with open(file2) as f2:
+            data2 = json.load(f2)
+
+        # Convert data1 and data2 to dicts of name -> fn
+        data1 = {fn["name"]: fn for fn in data1}
+        data2 = {fn["name"]: fn for fn in data2}
+
+        time_dir = graph_dir / str(time1)
+        time_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create nodes for all functions
+        nodes = []
+        edges = []
+        all_function_names = set(itertools.chain(data1.keys(), data2.keys()))
+        all_function_ids = set(fn["id"] for fn in data1) | set(fn["id"] for fn in data2)
+
+        for name in all_function_names:
+            fn1 = data1.get(name)
+            fn2 = data2.get(name)
+            
+            # Determine node color based on execution counts
+            if fn1 is None:
+                execs1 = 0
+                execs2 = fn2["nums_executed"]
+                color = "#2ECC40"  # Green - only in fuzzer 2
+                id = fn2["id"]
+            elif fn2 is None:
+                execs1 = fn1["nums_executed"]
+                execs2 = 0
+                color = "#FF4136"  # Red - only in fuzzer 1
+                id = fn1["id"]
+            else:
+                execs1 = fn1["nums_executed"]
+                execs2 = fn2["nums_executed"]
+                id = fn1["id"]
+                if fn1["id"] != fn2["id"]:
+                    print(f"Error: Function ID mismatch between files: {fn1['id']} != {fn2['id']}", file=sys.stderr)
+                if execs1 == 0 and execs2 == 0:
+                    color = "#808080"  # Gray - not executed in either
+                elif execs1 == 0:
+                    color = "#2ECC40"  # Green - only executed in fuzzer 2
+                elif execs2 == 0:
+                    color = "#FF4136"  # Red - only executed in fuzzer 1
+                else:
+                    color = "#0074D9"  # Blue - executed in both
+
+            nodes.append({
+                "data": {
+                    "id": id,
+                    "label": f"{name}\\nExecs: {execs1} / {execs2}",
+                    "color": color
+                }
+            })
+
+            existing_edges = set()
+            # Add edges for function calls
+            if fn1:
+                for callee in fn1["calls"]:
+                    edges.append({
+                        "data": {
+                            "source": fn1["id"],
+                            "target": callee,
+                            "color": "#FF4136",  # Red for fuzzer 1
+                            "label": "F1"
+                        }
+                    })
+                    existing_edges.add((fn1["id"], callee))
+
+            if fn2:
+                for callee in fn2["calls"]:
+                    if (fn2["id"], callee) in existing_edges:
+                        edges.append({
+                            "data": {
+                                "source": fn2["id"],
+                                "target": callee,
+                                "color": "#0074D9",  # Blue for both
+                                "label": "F2"
+                            }
+                        })
+                    else:
+                        edges.append({
+                            "data": {
+                                "source": fn2["id"],
+                                "target": callee,
+                                "color": "#2ECC40",  # Green for fuzzer 2
+                                "label": "F2"
+                            }
+                        })
+
+        # Write the call graph for this timestamp
+        (time_dir / "call_graph.json").write_text(json.dumps(nodes + edges, indent=2))
+        times.append(time1)
+
+    (output_path / "call_graph.html").write_text(CALL_GRAPH_HTML_TEMPLATE)
+    (css_dir / "style.css").write_text(STYLE_CSS)
+    (output_path / "times.js").write_text("const times = " + json.dumps(times) + ";")
+    print(f"✅ Call graph comparison report generated at: {output_path.resolve()}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate time-series HTML coverage report")
     parser.add_argument("input_dirs", nargs='+', help="One or two directories containing fun_coverage_*.json files")
     parser.add_argument("output", help="Directory to write the report to")
+    parser.add_argument("--call-graph", action="store_true", help="Generate call graph comparison report")
     args = parser.parse_args()
     if len(args.input_dirs) == 1:
         generate_time_series_report(args.input_dirs[0], args.output)
+    elif args.call_graph:
+        generate_call_graph_report(args.input_dirs, args.output)
     else:
         generate_comparison_report(args.input_dirs, args.output)
