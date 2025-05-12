@@ -16,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use memmap2::MmapOptions;
 use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -528,13 +528,14 @@ impl Fuzzer {
     }
 
     fn fuzz_one(&mut self, test_case: &TestCase) -> Result<()> {
-        info!("Fuzzing: {}", test_case.filename);
+        trace!("Fuzzing: {}", test_case.filename);
 
         match self.mutate(&test_case) {
             Ok(mutated) => match self.run_and_get_coverage(&mutated) {
                 Ok((_path, cov_feedback)) => {
                     let (trigger_new_cov, priority) = self.summarize_coverage(&cov_feedback);
                     if trigger_new_cov {
+                        info!("{} triggers new coverage", &test_case.filename);
                         let filename = self.save_to_seed_pool(&mutated, trigger_new_cov)?;
                         self.stats.new_coverage_count += 1;
                         self.stats.last_new_finding_time = Some(Instant::now());
