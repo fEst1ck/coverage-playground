@@ -6,7 +6,7 @@ use std::{
 
 use itertools::Itertools;
 use path_reduction::json_parser::parse_json_file;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::{json, Value};
 
 /// Control flow graph information of the target program
@@ -118,7 +118,50 @@ impl Analyzer {
             }
         }
 
+        // hyper edges
+        let hyper_edges = self.analyze_hyper_edge(block_coverage, edge_coverage);
+        for (pred, succs) in &hyper_edges {
+            let fun_id = self.control_flow_graph_info.block_id_to_fun_id[&pred];
+            fun_coverage.coverage.get_mut(&fun_id).unwrap().hyper_edges.extend(succs.iter().map(|succ| (*pred, *succ)));
+        }
+
         fun_coverage
+    }
+
+    /// Analyze the function coverage information
+    /// block_coverage: the coverage information of the blocks, an array of [block_id, count]
+    /// edge_coverage: the coverage information of the edges, an array of [src, dst, count]
+    pub fn analyze_hyper_edge(
+        &self,
+        _block_coverage: &Value,
+        edge_coverage: &Value,
+    ) -> BTreeMap<u32, BTreeSet<u32>> {
+        let mut succs = FxHashMap::default();
+        // Add edges with edge counts
+        for elem in edge_coverage.as_array().unwrap() {
+            let src = elem[0].as_u64().unwrap() as u32;
+            let dst = elem[1].as_u64().unwrap() as u32;
+            succs.entry(src).or_insert(BTreeSet::new()).insert(dst);
+        }
+        let mut hyper_edges = BTreeMap::new();
+        // for each node n, find all paths starting from n, and add the first node
+        // in the function of n to the hyper edge
+        for block in succs.keys() {
+            let cur_fun = self.control_flow_graph_info.block_id_to_fun_id[block];
+            let mut explored = FxHashSet::default();
+            let mut stack = vec![*block];
+            while let Some(suc) = stack.pop() {
+                if explored.insert(suc) {
+                    let suc_fun = self.control_flow_graph_info.block_id_to_fun_id[&suc];
+                    if suc_fun == cur_fun {
+                        hyper_edges.entry(*block).or_insert(BTreeSet::new()).insert(suc);
+                    } else {
+                        stack.extend(succs[&suc].iter());
+                    }
+                }
+            }
+        }
+        hyper_edges
     }
 
     pub fn write_fun_coverage(
@@ -159,6 +202,8 @@ struct EachFunctionCoverage {
     unique_edges: BTreeSet<(u32, u32)>,
     /// other functions that are called by this function
     calls: Vec<u32>,
+    /// hyper edges
+    hyper_edges: BTreeSet<(u32, u32)>,
 }
 
 impl EachFunctionCoverage {
@@ -170,6 +215,7 @@ impl EachFunctionCoverage {
             unique_blocks: BTreeMap::new(),
             unique_edges: BTreeSet::new(),
             calls: Vec::new(),
+            hyper_edges: BTreeSet::new(),
         }
     }
 
@@ -181,6 +227,7 @@ impl EachFunctionCoverage {
             "unique_blocks": self.unique_blocks.iter().map(|(block, count)| json!([*block as u64, *count as u64])).collect_vec(),
             "unique_edges": self.unique_edges.iter().map(|&(src, dst)| json!([src, dst])).collect_vec(),
             "calls": self.calls.clone(),
+            "hyper_edges": self.hyper_edges.iter().map(|&(src, dst)| json!([src, dst])).collect_vec(),
         })
     }
 }

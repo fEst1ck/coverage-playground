@@ -446,7 +446,9 @@ def generate_comparison_report(input_dirs: list[str], output_dir: str):
                 }
             } for bid in bids]
             edges1 = { (src, dst) for src, dst in fn1["unique_edges"] if src in bids and dst in bids } if fn1 else set()
+            edges1.update({ (src, dst) for src, dst in fn1["hyper_edges"] if src in bids and dst in bids } if fn1 else set())
             edges2 = { (src, dst) for src, dst in fn2["unique_edges"] if src in bids and dst in bids } if fn2 else set()
+            edges2.update({ (src, dst) for src, dst in fn2["hyper_edges"] if src in bids and dst in bids } if fn2 else set())
             edges_1_only = edges1 - edges2
             edges_2_only = edges2 - edges1
             edges_both = edges1 & edges2
