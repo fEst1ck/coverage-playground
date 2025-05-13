@@ -149,14 +149,15 @@ impl Analyzer {
         for block in succs.keys() {
             let cur_fun = self.control_flow_graph_info.block_id_to_fun_id[block];
             let mut explored = FxHashSet::default();
-            let mut stack = succs[block].iter().collect_vec();
-            while let Some(&suc) = stack.pop() {
+            let mut stack = succs[block].iter().cloned().collect_vec();
+            while let Some(suc) = stack.pop() {
                 if explored.insert(suc) {
                     let suc_fun = self.control_flow_graph_info.block_id_to_fun_id[&suc];
                     if suc_fun == cur_fun {
                         hyper_edges.entry(*block).or_insert(BTreeSet::new()).insert(suc);
                     } else {
-                        stack.extend(succs[&suc].iter());
+                        let suc_suc = succs.get(&suc).cloned().unwrap_or_default();
+                        stack.extend(suc_suc.into_iter());
                     }
                 }
             }
