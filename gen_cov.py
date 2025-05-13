@@ -850,8 +850,8 @@ def generate_call_graph_report(input_dirs: list[str], output_dir: str):
             data2 = json.load(f2)
 
         # Convert data1 and data2 to dicts of name -> fn
-        data1 = {fn["name"]: fn for fn in data1}
-        data2 = {fn["name"]: fn for fn in data2}
+        data1 = {fn["id"]: fn for fn in data1}
+        data2 = {fn["id"]: fn for fn in data2}
 
         time_dir = graph_dir / str(time1)
         time_dir.mkdir(parents=True, exist_ok=True)
@@ -859,29 +859,29 @@ def generate_call_graph_report(input_dirs: list[str], output_dir: str):
         # Create nodes for all functions
         nodes = []
         edges = []
-        all_function_names = set(itertools.chain(data1.keys(), data2.keys()))
+        all_function_ids = set(itertools.chain(data1.keys(), data2.keys()))
 
-        for name in all_function_names:
-            fn1 = data1.get(name)
-            fn2 = data2.get(name)
+        for id in all_function_ids:
+            fn1 = data1.get(id)
+            fn2 = data2.get(id)
             
             # Determine node color based on execution counts
             if fn1 is None:
                 execs1 = 0
                 execs2 = fn2["nums_executed"]
                 color = "#2ECC40"  # Green - only in fuzzer 2
-                id = fn2["id"]
+                name = fn2["name"]
             elif fn2 is None:
                 execs1 = fn1["nums_executed"]
                 execs2 = 0
                 color = "#FF4136"  # Red - only in fuzzer 1
-                id = fn1["id"]
+                name = fn1["name"]
             else:
                 execs1 = fn1["nums_executed"]
                 execs2 = fn2["nums_executed"]
-                id = fn1["id"]
-                if fn1["id"] != fn2["id"]:
-                    print(f"Error: Function ID mismatch between files: {fn1['id']} != {fn2['id']}", file=sys.stderr)
+                name = fn1["name"]
+                if fn1["name"] != fn2["name"]:
+                    print(f"Error: Function Name mismatch between files: {fn1['name']} != {fn2['name']}", file=sys.stderr)
                 if execs1 == 0 and execs2 == 0:
                     color = "#808080"  # Gray - not executed in either
                 elif execs1 == 0:
