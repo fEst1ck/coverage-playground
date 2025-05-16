@@ -1,4 +1,4 @@
-use super::CoverageMetric;
+use super::{BlockCoverage, CoverageFeedback, CoverageMetric, EdgeCoverage};
 use log::{info, warn};
 use md5::{compute, Digest};
 use path_reduction::json_parser::parse_json_file;
@@ -9,6 +9,8 @@ type BlockID = u32;
 
 /// Per-function path coverage.
 pub struct PerFunctionPathCoverage {
+    block_cov: BlockCoverage,
+    edge_cov: EdgeCoverage,
     coverage: FxHashMap<BlockID, FxHashSet<Digest>>,
     first_to_lasts: FxHashMap<BlockID, FxHashSet<BlockID>>,
     // invariant: total_cov is the sum of
@@ -29,6 +31,8 @@ impl PerFunctionPathCoverage {
             })
             .collect();
         Self {
+            block_cov: BlockCoverage::default(),
+            edge_cov: EdgeCoverage::default(),
             coverage: FxHashMap::default(),
             first_to_lasts,
             total_cov: 0,
@@ -116,6 +120,8 @@ impl PerFunctionPathCoverage {
     #[cfg(test)]
     fn empty() -> Self {
         Self {
+            block_cov: BlockCoverage::default(),
+            edge_cov: EdgeCoverage::default(),
             coverage: FxHashMap::default(),
             first_to_lasts: FxHashMap::default(),
             total_cov: 0,
@@ -131,12 +137,25 @@ impl Default for PerFunctionPathCoverage {
 }
 
 impl CoverageMetric for PerFunctionPathCoverage {
-    fn update_from_path(&mut self, mut path: &[u32]) -> bool {
+    fn update_from_path(&mut self, mut path: &[u32]) -> CoverageFeedback {
+        let block_feedback = self.block_cov.update_from_path(&path);
+        let edge_feedback = self.edge_cov.update_from_path(&path);
         let mut new_cov = false;
         while !path.is_empty() {
             new_cov = self.reduce_fun(&mut path) || new_cov;
         }
-        new_cov
+        if block_feedback.new_cov() {
+            block_feedback
+        } else if edge_feedback.new_cov() {
+            edge_feedback
+        } else if new_cov {
+            CoverageFeedback::NewPath {
+                block_uniqueness: block_feedback.get_block_uniqueness(),
+                edge_uniqueness: edge_feedback.get_edge_uniqueness(),
+            }
+        } else {
+            CoverageFeedback::NoCoverage
+        }
     }
 
     fn cov_info(&self) -> serde_json::Value {

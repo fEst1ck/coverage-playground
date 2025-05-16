@@ -1,4 +1,4 @@
-use super::CoverageMetric;
+use super::{CoverageFeedback, CoverageMetric};
 use rustc_hash::FxHashMap;
 use serde_json::Value;
 
@@ -8,18 +8,24 @@ pub struct EdgeCoverage {
 }
 
 impl CoverageMetric for EdgeCoverage {
-    fn update_from_path(&mut self, path: &[u32]) -> bool {
+    fn update_from_path(&mut self, path: &[u32]) -> CoverageFeedback {
         let mut new_coverage = false;
 
+        let mut uniq = usize::MAX;
         for window in path.windows(2) {
             let edge = (window[0], window[1]);
-            self.edges.entry(edge).and_modify(|count| *count += 1).or_insert_with(|| {
+            let count = *self.edges.entry(edge).and_modify(|count| *count += 1).or_insert_with(|| {
                 new_coverage = true;
                 1
             });
+            uniq = uniq.min(count);
         }
 
-        new_coverage
+        if new_coverage {
+            CoverageFeedback::NewEdge { uniqueness: uniq }
+        } else {
+            CoverageFeedback::NoCoverage
+        }
     }
 
     fn cov_info(&self) -> Value {

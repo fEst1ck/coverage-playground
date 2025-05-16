@@ -1,8 +1,6 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs::File,
-    io::Write,
-};
+use std::
+    collections::{BTreeMap, BTreeSet}
+;
 
 use itertools::Itertools;
 use path_reduction::json_parser::parse_json_file;
@@ -163,20 +161,6 @@ impl Analyzer {
             }
         }
         hyper_edges
-    }
-
-    pub fn write_fun_coverage(
-        &self,
-        fun_coverage: &FunctionCoverage,
-        path: &str,
-    ) -> std::io::Result<()> {
-        let mut file = File::create(path)?;
-        file.write_all(
-            fun_coverage
-                .generate_dot(&self.control_flow_graph_info)
-                .as_bytes(),
-        )?;
-        Ok(())
     }
 }
 
