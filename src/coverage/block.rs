@@ -1,4 +1,4 @@
-use super::CoverageMetric;
+use super::{CoverageFeedback, CoverageMetric};
 use rustc_hash::FxHashMap;
 use serde_json::Value;
 
@@ -8,20 +8,27 @@ pub struct BlockCoverage {
 }
 
 impl CoverageMetric for BlockCoverage {
-    fn update_from_path(&mut self, path: &[u32]) -> bool {
+    fn update_from_path(&mut self, path: &[u32]) -> CoverageFeedback {
         let mut new_coverage = false;
 
+        let mut uniq = usize::MAX;
+
         for &block in path {
-            self.blocks
+            let count = *self.blocks
                 .entry(block)
                 .and_modify(|count| *count += 1)
                 .or_insert_with(|| {
                     new_coverage = true;
                     1
                 });
+            uniq = uniq.min(count);
         }
-
-        new_coverage
+        
+        if new_coverage {
+            CoverageFeedback::NewBlock { uniqueness: uniq }
+        } else {
+            CoverageFeedback::NoCoverage
+        }
     }
 
     fn cov_info(&self) -> Value {

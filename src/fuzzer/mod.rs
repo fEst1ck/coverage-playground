@@ -20,15 +20,13 @@ use log::{debug, error, info, trace, warn};
 use memmap2::MmapOptions;
 use rand::Rng;
 use rustc_hash::{FxHashMap, FxHashSet};
-use serde::{Deserialize, Serialize};
 use serde_json;
 
 use crate::{
     analyzer::Analyzer,
     cli::Args,
     coverage::{
-        get_coverage_metric_by_name, get_metric_priority, CoverageFeedback, CoverageMetric,
-        CoverageMetricAggregator,
+        get_coverage_metric_by_name, CoverageFeedback, CoverageFeedbacks, CoverageMetric, CoverageMetricAggregator
     },
 };
 pub use error::{FuzzerError, Result};
@@ -39,12 +37,12 @@ const LOG_INTERVAL_SECS: u64 = 30; // Log state every 30 seconds
 const GRAPH_INTERVAL_SECS: u64 = 300; // Write graph every 5 minute
 
 /// Test case representation
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TestCase {
     /// Name of the file in the queue directory
     filename: String,
     /// Priority of the test case
-    priority: usize,
+    priority: CoverageFeedback,
 }
 
 impl PartialOrd for TestCase {
@@ -285,12 +283,8 @@ impl Fuzzer {
         self.crashes_dir.join(filename)
     }
 
-    fn save_to_seed_pool(&mut self, data: &[u8], new_coverage: bool) -> Result<String> {
-        let filename = if new_coverage {
-            format!("id:{:06}:+cov", self.next_id)
-        } else {
-            format!("id:{:06}", self.next_id)
-        };
+    fn save_to_seed_pool(&mut self, data: &[u8]) -> Result<String> {
+        let filename = format!("id:{:06}", self.next_id);
         self.next_id += 1;
 
         let path = self.get_queue_path(&filename);
@@ -319,7 +313,7 @@ impl Fuzzer {
     fn run_and_get_coverage(
         &mut self,
         input: &[u8],
-    ) -> Result<(Vec<u32>, CoverageFeedback<'static>)> {
+    ) -> Result<(Vec<u32>, CoverageFeedbacks<'static>)> {
         self.stats.total_executions += 1;
 
         // Prepare command
@@ -439,18 +433,14 @@ impl Fuzzer {
         Ok((path, cov_feedback))
     }
 
-    fn summarize_coverage(&self, cov: &CoverageFeedback) -> (bool, usize) {
-        let mut any_cov = false;
-        let mut priority = 0;
-        for (metric_name, &new_cov) in cov.iter() {
+    fn summarize_coverage(&self, cov: &CoverageFeedbacks) -> CoverageFeedback {
+        let mut any_cov = CoverageFeedback::NoCoverage;
+        for (metric_name, new_cov) in cov.iter() {
             if self.args.use_coverage.contains(&metric_name.to_string()) {
-                if new_cov {
-                    any_cov = true;
-                    priority = priority.max(get_metric_priority(metric_name.to_string()));
-                }
+                any_cov = any_cov.max(new_cov.clone());
             }
         }
-        (any_cov, priority)
+        any_cov
     }
 
     /// Mutate a test case
@@ -533,13 +523,13 @@ impl Fuzzer {
         match self.mutate(&test_case) {
             Ok(mutated) => match self.run_and_get_coverage(&mutated) {
                 Ok((_path, cov_feedback)) => {
-                    let (trigger_new_cov, priority) = self.summarize_coverage(&cov_feedback);
-                    if trigger_new_cov {
+                    let cov = self.summarize_coverage(&cov_feedback);
+                    if cov.new_cov() {
                         info!("{} triggers new coverage", &test_case.filename);
-                        let filename = self.save_to_seed_pool(&mutated, trigger_new_cov)?;
+                        let filename = self.save_to_seed_pool(&mutated)?;
                         self.stats.new_coverage_count += 1;
                         self.stats.last_new_finding_time = Some(Instant::now());
-                        self.queue.push(TestCase { filename, priority });
+                        self.queue.push(TestCase { filename, priority: cov });
                     }
                 }
                 Err(e) => {
@@ -575,7 +565,7 @@ impl Fuzzer {
                     if let Some(filename_str) = filename.to_str() {
                         self.queue.push(TestCase {
                             filename: filename_str.to_string(),
-                            priority: 0,
+                            priority: CoverageFeedback::NoCoverage,
                         });
                     }
                 }
@@ -594,12 +584,12 @@ impl Fuzzer {
 
                 match self.run_and_get_coverage(&data) {
                     Ok((path, cov_feedback)) => {
-                        let (triggers_new_cov, priority) = self.summarize_coverage(&cov_feedback);
-                        if triggers_new_cov {
-                            let filename = self.save_to_seed_pool(&data, triggers_new_cov)?;
+                        let cov = self.summarize_coverage(&cov_feedback);
+                        if cov.new_cov() {
+                            let filename = self.save_to_seed_pool(&data)?;
                             self.stats.new_coverage_count += 1;
                             self.stats.last_new_finding_time = Some(Instant::now());
-                            self.queue.push(TestCase { filename, priority });
+                            self.queue.push(TestCase { filename, priority: cov });
                             info!("Loaded seed file: {}", entry.path().display());
                             debug!("Path: {:?}", path);
                         } else {
@@ -756,40 +746,6 @@ impl Fuzzer {
         Ok(())
     }
 
-    /// Generate a graphviz dot graph where the nodes are blocks, and edges are directed
-    /// from the source block to the target block
-    /// Each node is labeled with count from the block coverage metric
-    /// Each edge is labeled with count from the edge coverage metric
-    fn get_coverage_graph(&self) -> String {
-        let mut dot = String::from("digraph coverage {\n");
-
-        // Get coverage counts
-        let full_cov = self.coverage.full_cov();
-        let block_counts = full_cov.get("block").unwrap();
-        let edge_counts = full_cov.get("edge").unwrap();
-
-        // Add nodes with block counts
-        for elem in block_counts.as_array().unwrap() {
-            let block_id = elem[0].as_u64().unwrap();
-            let count = elem[1].as_u64().unwrap();
-            dot.push_str(&format!(
-                "    {} [label=\"{} ({})\"];\n",
-                block_id, block_id, count
-            ));
-        }
-
-        // Add edges with edge counts
-        for elem in edge_counts.as_array().unwrap() {
-            let src = elem[0].as_u64().unwrap();
-            let dst = elem[1].as_u64().unwrap();
-            let count = elem[2].as_u64().unwrap();
-            dot.push_str(&format!("    {} -> {} [label=\"{}\"];\n", src, dst, count));
-        }
-
-        dot.push_str("}\n");
-        dot
-    }
-
     fn _write_coverage_graph2(&self) -> Result<()> {
         let analyzer = Analyzer::default();
         let full_cov = self.coverage.full_cov();
@@ -802,38 +758,6 @@ impl Fuzzer {
             self.stats.start_time.unwrap().elapsed().as_secs()
         )))?;
         file.write_all(serde_json::to_string_pretty(&json).unwrap().as_bytes())?;
-        Ok(())
-    }
-
-    fn _write_coverage_graph1(&self) {
-        let analyzer = Analyzer::default();
-        let full_cov = self.coverage.full_cov();
-        let block_counts = full_cov.get("block").unwrap();
-        let edge_counts = full_cov.get("edge").unwrap();
-        let fun_coverage = analyzer.analyze_fun_coverage(block_counts, edge_counts);
-        analyzer
-            .write_fun_coverage(
-                &fun_coverage,
-                &self
-                    .stats_dir
-                    .join(format!(
-                        "fun_coverage_{}.dot",
-                        self.stats.start_time.unwrap().elapsed().as_secs()
-                    ))
-                    .to_str()
-                    .unwrap(),
-            )
-            .unwrap()
-    }
-
-    /// Write the coverage graph to a `coverage.dot` file under the stats directory
-    fn _write_coverage_graph(&self) -> Result<()> {
-        let dot = self.get_coverage_graph();
-        let mut file = File::create(&self.stats_dir.join(format!(
-            "coverage_{}.dot",
-            self.stats.start_time.unwrap().elapsed().as_secs()
-        )))?;
-        file.write_all(dot.as_bytes())?;
         Ok(())
     }
 
@@ -852,7 +776,7 @@ impl Fuzzer {
             itertools::Either::Left(entries.flatten().filter_map(|entry| {
                 entry.file_name().to_str().map(|filename| TestCase {
                     filename: filename.to_string(),
-                    priority: 0,
+                    priority: CoverageFeedback::NoCoverage,
                 })
             }))
         } else {
@@ -878,12 +802,12 @@ impl Fuzzer {
             let data = fs::read(other.get_queue_path(&test_case.filename))?;
             match self.run_and_get_coverage(&data) {
                 Ok((_path, cov_feedback)) => {
-                    let (trigger_new_cov, priority) = self.summarize_coverage(&cov_feedback);
-                    if trigger_new_cov {
-                        let filename = self.save_to_seed_pool(&data, trigger_new_cov)?;
+                    let cov = self.summarize_coverage(&cov_feedback);
+                    if cov.new_cov() {
+                        let filename = self.save_to_seed_pool(&data)?;
                         self.stats.new_coverage_count += 1;
                         self.stats.last_new_finding_time = Some(Instant::now());
-                        self.queue.push(TestCase { filename, priority });
+                        self.queue.push(TestCase { filename, priority: cov });
                         warn!(
                             "Synced seed file: {} from fuzzer {} to fuzzer {}",
                             test_case.filename, other.id, self.id
