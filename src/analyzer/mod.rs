@@ -300,18 +300,4 @@ impl FunctionCoverage {
         dot.push_str("}\n");
         dot
     }
-
-    /// Write the function coverage visualization to a DOT file
-    pub fn write_dot_file(
-        &self,
-        path: &str,
-        control_flow_graph_info: &ControlFlowGraphInfo,
-    ) -> std::io::Result<()> {
-        use std::fs::File;
-        use std::io::Write;
-        let dot = self.generate_dot(control_flow_graph_info);
-        let mut file = File::create(path)?;
-        file.write_all(dot.as_bytes())?;
-        Ok(())
-    }
 }
