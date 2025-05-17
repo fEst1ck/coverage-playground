@@ -27,10 +27,10 @@ pub enum CoverageFeedback {
         uniqueness: usize,
     },
     NewPath {
-        block_uniqueness: usize,
-        edge_uniqueness: usize,
+        uniqueness: usize,
     },
     NoCoverage(usize),
+    Old(Box<CoverageFeedback>),
 }
 
 impl CoverageFeedback {
@@ -49,7 +49,43 @@ impl CoverageFeedback {
             _ => unreachable!(),
         }
     }
-    
+
+    pub(crate) fn seed_post_fix(&self) -> String {
+        match self {
+            CoverageFeedback::NewBlock { uniqueness } => format!("block_{}", uniqueness),
+            CoverageFeedback::NewEdge { uniqueness } => format!("edge_{}", uniqueness),
+            CoverageFeedback::NewPath { uniqueness } => format!("path_{}", uniqueness),
+            CoverageFeedback::NoCoverage(cov) => format!("nocov_{}", cov),
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn from_file_name(seed_file_name: &str) -> Self {
+        let parts: Vec<&str> = seed_file_name.split('_').collect();
+        if parts.len() < 3 {
+            panic!("Invalid seed file name: {}", seed_file_name);
+        }
+        let cov_type = parts[1];
+        let uniqueness = parts[2].parse::<usize>().unwrap_or(0);
+        let cov = match cov_type {
+            "block" => CoverageFeedback::NewBlock { uniqueness },
+            "edge" => CoverageFeedback::NewEdge { uniqueness },
+            "path" => CoverageFeedback::NewPath { uniqueness },
+            "nocov" => CoverageFeedback::NoCoverage(uniqueness),
+            _ => unreachable!(),
+        };
+        CoverageFeedback::Old(Box::new(cov))
+    }
+
+    fn priority(&self) -> usize {
+        match self {
+            CoverageFeedback::NewBlock { .. } => 5,
+            CoverageFeedback::NewEdge { .. } => 4,
+            CoverageFeedback::NewPath { .. } => 3,
+            CoverageFeedback::NoCoverage(_) => 2,
+            CoverageFeedback::Old(_) => 1,
+        }
+    }
 }
 
 impl PartialOrd for CoverageFeedback {
@@ -59,29 +95,26 @@ impl PartialOrd for CoverageFeedback {
                 CoverageFeedback::NewBlock { uniqueness: u1 },
                 CoverageFeedback::NewBlock { uniqueness: u2 },
             ) => Some(u2.cmp(u1)),
-            (CoverageFeedback::NewBlock { .. }, _) => Some(Ordering::Greater),
             (
                 CoverageFeedback::NewEdge { uniqueness: u1 },
                 CoverageFeedback::NewEdge { uniqueness: u2 },
             ) => Some(u2.cmp(u1)),
-            (CoverageFeedback::NewEdge { .. }, _) => Some(Ordering::Greater),
             (
                 CoverageFeedback::NewPath {
-                    block_uniqueness: _u11,
-                    edge_uniqueness: u12,
+                    uniqueness: u1,
                 },
                 CoverageFeedback::NewPath {
-                    block_uniqueness: _u21,
-                    edge_uniqueness: u22,
+                    uniqueness: u2,
                 },
-            ) => Some(u22.cmp(u12)),
-            (CoverageFeedback::NewPath { .. }, _) => Some(Ordering::Greater),
+            ) => Some(u2.cmp(u1)),
             (CoverageFeedback::NoCoverage(cov1), CoverageFeedback::NoCoverage(cov2)) => {
                 Some(cov2.cmp(cov1))
             }
             (CoverageFeedback::NoCoverage(..), _) => {
                 Some(Ordering::Less)
             }
+            (CoverageFeedback::Old(c1), CoverageFeedback::Old(c2)) => Some(c1.cmp(c2)),
+            _ => self.priority().partial_cmp(&other.priority()),
         }
     }
 }

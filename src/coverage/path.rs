@@ -59,8 +59,7 @@ impl CoverageMetric for PathCoverage {
             edge_feedback
         } else if new_path {
             CoverageFeedback::NewPath {
-                block_uniqueness: block_feedback.get_block_uniqueness(),
-                edge_uniqueness: edge_feedback.get_edge_uniqueness(),
+                uniqueness: edge_feedback.get_edge_uniqueness(),
             }
         } else {
             CoverageFeedback::NoCoverage(usize::MAX)
