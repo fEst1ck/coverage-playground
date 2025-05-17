@@ -150,8 +150,7 @@ impl CoverageMetric for PerFunctionPathCoverage {
             edge_feedback
         } else if new_cov {
             CoverageFeedback::NewPath {
-                block_uniqueness: block_feedback.get_block_uniqueness(),
-                edge_uniqueness: edge_feedback.get_edge_uniqueness(),
+                uniqueness: edge_feedback.get_edge_uniqueness(),
             }
         } else {
             CoverageFeedback::NoCoverage(usize::MAX)

@@ -29,7 +29,7 @@ impl CoverageMetric for RawPathCoverage {
         // Return true if this is a new path
         let new_path = self.paths.insert(path_hash);
         if new_path {
-            CoverageFeedback::NewPath { block_uniqueness: 0, edge_uniqueness: 0 }
+            CoverageFeedback::NewPath { uniqueness: usize::MAX }
         } else {
             CoverageFeedback::NoCoverage(usize::MAX)
     }

@@ -34,7 +34,7 @@ pub use error::{FuzzerError, Result};
 const COVERAGE_SHM_BASE: &str = "/tmp/coverage_shm";
 const COVERAGE_SHM_SIZE: usize = 512 * 1024 * 1024; // 512MB
 const LOG_INTERVAL_SECS: u64 = 30; // Log state every 30 seconds
-const GRAPH_INTERVAL_SECS: u64 = 300; // Write graph every 5 minute
+const GRAPH_INTERVAL_SECS: u64 = 10; // Write graph every 5 minute
 
 /// Test case representation
 #[derive(Clone, PartialEq, Eq)]
@@ -283,8 +283,8 @@ impl Fuzzer {
         self.crashes_dir.join(filename)
     }
 
-    fn save_to_seed_pool(&mut self, data: &[u8]) -> Result<String> {
-        let filename = format!("id:{:06}", self.next_id);
+    fn save_to_seed_pool(&mut self, data: &[u8], cov: &CoverageFeedback) -> Result<String> {
+        let filename = format!("id:{:06}_{}", self.next_id, cov.seed_post_fix());
         self.next_id += 1;
 
         let path = self.get_queue_path(&filename);
@@ -526,7 +526,7 @@ impl Fuzzer {
                     let cov = self.summarize_coverage(&cov_feedback);
                     if cov.new_cov() {
                         info!("{} triggers new coverage", &test_case.filename);
-                        let filename = self.save_to_seed_pool(&mutated)?;
+                        let filename = self.save_to_seed_pool(&mutated, &cov)?;
                         self.stats.new_coverage_count += 1;
                         self.stats.last_new_finding_time = Some(Instant::now());
                         self.queue.push(TestCase { filename, priority: cov });
@@ -563,9 +563,10 @@ impl Fuzzer {
                 // Get just the filename component, not the full path
                 if let Some(filename) = entry.path().file_name() {
                     if let Some(filename_str) = filename.to_str() {
+                        let cov = CoverageFeedback::from_file_name(filename_str);
                         self.queue.push(TestCase {
                             filename: filename_str.to_string(),
-                            priority: CoverageFeedback::NoCoverage(usize::MAX),
+                            priority: cov,
                         });
                     }
                 }
@@ -586,7 +587,7 @@ impl Fuzzer {
                     Ok((path, cov_feedback)) => {
                         let cov = self.summarize_coverage(&cov_feedback);
                         if cov.new_cov() {
-                            let filename = self.save_to_seed_pool(&data)?;
+                            let filename = self.save_to_seed_pool(&data, &cov)?;
                             self.stats.new_coverage_count += 1;
                             self.stats.last_new_finding_time = Some(Instant::now());
                             self.queue.push(TestCase { filename, priority: cov });
@@ -804,7 +805,7 @@ impl Fuzzer {
                 Ok((_path, cov_feedback)) => {
                     let cov = self.summarize_coverage(&cov_feedback);
                     if cov.new_cov() {
-                        let filename = self.save_to_seed_pool(&data)?;
+                        let filename = self.save_to_seed_pool(&data, &cov)?;
                         self.stats.new_coverage_count += 1;
                         self.stats.last_new_finding_time = Some(Instant::now());
                         self.queue.push(TestCase { filename, priority: cov });
