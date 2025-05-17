@@ -24,7 +24,7 @@ impl CoverageMetric for EdgeCoverage {
         if new_coverage {
             CoverageFeedback::NewEdge { uniqueness: uniq }
         } else {
-            CoverageFeedback::NoCoverage
+            CoverageFeedback::NoCoverage(uniq)
         }
     }
 
