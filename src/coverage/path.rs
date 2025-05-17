@@ -63,7 +63,7 @@ impl CoverageMetric for PathCoverage {
                 edge_uniqueness: edge_feedback.get_edge_uniqueness(),
             }
         } else {
-            CoverageFeedback::NoCoverage
+            CoverageFeedback::NoCoverage(usize::MAX)
         }
     }
 

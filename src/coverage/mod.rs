@@ -8,7 +8,7 @@ mod edge;
 mod path;
 mod per_function;
 mod raw_path;
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::{any::Any, cmp::Ordering, collections::BTreeMap};
 
 pub use block::BlockCoverage;
 use cached::proc_macro::cached;
@@ -18,7 +18,7 @@ use per_function::PerFunctionPathCoverage;
 use raw_path::RawPathCoverage;
 use serde_json::Value;
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoverageFeedback {
     NewBlock {
         uniqueness: usize,
@@ -30,13 +30,14 @@ pub enum CoverageFeedback {
         block_uniqueness: usize,
         edge_uniqueness: usize,
     },
-    NoCoverage,
+    NoCoverage(usize),
 }
 
 impl CoverageFeedback {
     pub fn get_block_uniqueness(&self) -> usize {
         match self {
             CoverageFeedback::NewBlock { uniqueness } => *uniqueness,
+            CoverageFeedback::NoCoverage(cov) => *cov,
             _ => unreachable!(),
         }
     }
@@ -44,6 +45,7 @@ impl CoverageFeedback {
     pub fn get_edge_uniqueness(&self) -> usize {
         match self {
             CoverageFeedback::NewEdge { uniqueness } => *uniqueness,
+            CoverageFeedback::NoCoverage(cov) => *cov,
             _ => unreachable!(),
         }
     }
@@ -74,12 +76,11 @@ impl PartialOrd for CoverageFeedback {
                 },
             ) => Some(u22.cmp(u12)),
             (CoverageFeedback::NewPath { .. }, _) => Some(Ordering::Greater),
-            (CoverageFeedback::NoCoverage, other) => {
-                if other.new_cov() {
-                    Some(Ordering::Less)
-                } else {
-                    Some(Ordering::Equal)
-                }
+            (CoverageFeedback::NoCoverage(cov1), CoverageFeedback::NoCoverage(cov2)) => {
+                Some(cov2.cmp(cov1))
+            }
+            (CoverageFeedback::NoCoverage(..), _) => {
+                Some(Ordering::Less)
             }
         }
     }

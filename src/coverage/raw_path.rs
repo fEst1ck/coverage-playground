@@ -31,8 +31,8 @@ impl CoverageMetric for RawPathCoverage {
         if new_path {
             CoverageFeedback::NewPath { block_uniqueness: 0, edge_uniqueness: 0 }
         } else {
-            CoverageFeedback::NoCoverage
-        }
+            CoverageFeedback::NoCoverage(usize::MAX)
+    }
     }
 
     fn cov_info(&self) -> Value {

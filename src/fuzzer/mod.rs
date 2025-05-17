@@ -434,7 +434,7 @@ impl Fuzzer {
     }
 
     fn summarize_coverage(&self, cov: &CoverageFeedbacks) -> CoverageFeedback {
-        let mut any_cov = CoverageFeedback::NoCoverage;
+        let mut any_cov = CoverageFeedback::NoCoverage(usize::MAX);
         for (metric_name, new_cov) in cov.iter() {
             if self.args.use_coverage.contains(&metric_name.to_string()) {
                 any_cov = any_cov.max(new_cov.clone());
@@ -565,7 +565,7 @@ impl Fuzzer {
                     if let Some(filename_str) = filename.to_str() {
                         self.queue.push(TestCase {
                             filename: filename_str.to_string(),
-                            priority: CoverageFeedback::NoCoverage,
+                            priority: CoverageFeedback::NoCoverage(usize::MAX),
                         });
                     }
                 }
@@ -776,7 +776,7 @@ impl Fuzzer {
             itertools::Either::Left(entries.flatten().filter_map(|entry| {
                 entry.file_name().to_str().map(|filename| TestCase {
                     filename: filename.to_string(),
-                    priority: CoverageFeedback::NoCoverage,
+                    priority: CoverageFeedback::NoCoverage(usize::MAX),
                 })
             }))
         } else {

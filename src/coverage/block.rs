@@ -27,7 +27,7 @@ impl CoverageMetric for BlockCoverage {
         if new_coverage {
             CoverageFeedback::NewBlock { uniqueness: uniq }
         } else {
-            CoverageFeedback::NoCoverage
+            CoverageFeedback::NoCoverage(uniq)
         }
     }
 
