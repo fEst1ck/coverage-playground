@@ -110,9 +110,6 @@ impl PartialOrd for CoverageFeedback {
             (CoverageFeedback::NoCoverage(cov1), CoverageFeedback::NoCoverage(cov2)) => {
                 Some(cov2.cmp(cov1))
             }
-            (CoverageFeedback::NoCoverage(..), _) => {
-                Some(Ordering::Less)
-            }
             (CoverageFeedback::Old(c1), CoverageFeedback::Old(c2)) => Some(c1.cmp(c2)),
             _ => self.priority().partial_cmp(&other.priority()),
         }
