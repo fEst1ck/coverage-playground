@@ -34,7 +34,7 @@ pub use error::{FuzzerError, Result};
 const COVERAGE_SHM_BASE: &str = "/tmp/coverage_shm";
 const COVERAGE_SHM_SIZE: usize = 512 * 1024 * 1024; // 512MB
 const LOG_INTERVAL_SECS: u64 = 30; // Log state every 30 seconds
-const GRAPH_INTERVAL_SECS: u64 = 10; // Write graph every 5 minute
+const GRAPH_INTERVAL_SECS: u64 = 600; // Write graph every 10 minute
 
 /// Test case representation
 #[derive(Clone, PartialEq, Eq)]
