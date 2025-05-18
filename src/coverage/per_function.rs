@@ -1,4 +1,4 @@
-use super::{BlockCoverage, CoverageFeedback, CoverageMetric, EdgeCoverage};
+use super::{edge, BlockCoverage, CoverageFeedback, CoverageMetric, EdgeCoverage};
 use log::{info, warn};
 use md5::{compute, Digest};
 use path_reduction::json_parser::parse_json_file;
@@ -153,7 +153,7 @@ impl CoverageMetric for PerFunctionPathCoverage {
                 uniqueness: edge_feedback.get_edge_uniqueness(),
             }
         } else {
-            CoverageFeedback::NoCoverage(usize::MAX)
+            CoverageFeedback::NoCoverage(edge_feedback.get_edge_uniqueness())
         }
     }
 
