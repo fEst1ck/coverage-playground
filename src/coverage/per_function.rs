@@ -69,6 +69,7 @@ impl PerFunctionPathCoverage {
         if cfg!(test) {
             println!("unreduced path: {:?}", path);
         }
+        let mut seen_blocks: FxHashSet<BlockID> = FxHashSet::default();
         let mut new_cov = false;
         let first = if let Some(&first) = path.first() {
             first
@@ -101,6 +102,10 @@ impl PerFunctionPathCoverage {
                 }
                 return self.compute_hash_and_update_cov(&reduced_path);
             } else {
+                if seen_blocks.insert(new_block) {
+                    reduced_path.push(new_block);
+                    continue;
+                }
                 if let Some(&last_idx) = loop_stack.get(&new_block) {
                     reduced_path.truncate(last_idx);
                     loop_stack.retain(|_, &mut off| off < last_idx);
