@@ -443,16 +443,21 @@ impl Fuzzer {
         any_cov
     }
 
-    /// Mutate a test case
-    fn mutate(&self, test_case: &TestCase) -> Result<Vec<u8>> {
-        // Read the input file
-        debug!("Mutating: {}", test_case.filename);
-        let input = fs::read(self.get_queue_path(&test_case.filename))?;
+    fn havoc(&self, test_input: &mut Vec<u8>) {
+        // randomly select 1, 2, 4, 8, 16, 32, 64, 128
         let mut rng = rand::thread_rng();
-        let mut result = input.to_vec();
+        let power = rng.gen_range(0..=7);
+        let mutate_times = 2usize.pow(power);
+        for _ in 0..mutate_times {
+            self.mutate_data(test_input);
+        }
+    }
 
-        if result.len() == 0 {
-            return Ok(result);
+    fn mutate_data(&self, test_input: &mut Vec<u8>) {
+        let mut rng = rand::thread_rng();
+
+        if test_input.len() == 0 {
+            return;
         }
 
         // Choose mutation strategy:
@@ -464,42 +469,50 @@ impl Fuzzer {
 
         if strategy < 30 {
             // Strategy 1: Flip a random bit
-            let pos = rng.gen_range(0..result.len());
+            let pos = rng.gen_range(0..test_input.len());
             let bit = rng.gen_range(0..8);
-            result[pos] ^= 1 << bit;
+            test_input[pos] ^= 1 << bit;
         } else if strategy < 50 {
             // Strategy 2: Replace with random byte
-            let pos = rng.gen_range(0..result.len());
-            result[pos] = rng.gen();
+            let pos = rng.gen_range(0..test_input.len());
+            test_input[pos] = rng.gen();
         } else if strategy < 75 {
             // Strategy 3: Delete consecutive bytes
-            if result.len() > 1 {
+            if test_input.len() > 1 {
                 // Only delete if we have at least 2 bytes
-                let delete_len = rng.gen_range(1..=std::cmp::min(8, result.len())); // Delete 1-8 bytes
-                let start_pos = rng.gen_range(0..=result.len() - delete_len);
-                result.drain(start_pos..start_pos + delete_len);
+                let delete_len = rng.gen_range(1..=std::cmp::min(8, test_input.len())); // Delete 1-8 bytes
+                let start_pos = rng.gen_range(0..=test_input.len() - delete_len);
+                test_input.drain(start_pos..start_pos + delete_len);
             }
         } else {
             // Strategy 4: Clone/insert bytes
-            let chunk_len = rng.gen_range(1..=std::cmp::min(16, result.len())); // Clone/insert 1-16 bytes
-            let insert_pos = rng.gen_range(0..=result.len());
+            let chunk_len = rng.gen_range(1..=std::cmp::min(16, test_input.len())); // Clone/insert 1-16 bytes
+            let insert_pos = rng.gen_range(0..=test_input.len());
 
             if rng.gen_bool(0.75) {
                 // 75% chance to clone existing bytes
-                if result.len() >= chunk_len {
+                if test_input.len() >= chunk_len {
                     // Pick a random source position to clone from
-                    let src_pos = rng.gen_range(0..=result.len() - chunk_len);
-                    let chunk: Vec<u8> = result[src_pos..src_pos + chunk_len].to_vec();
-                    result.splice(insert_pos..insert_pos, chunk);
+                    let src_pos = rng.gen_range(0..=test_input.len() - chunk_len);
+                    let chunk: Vec<u8> = test_input[src_pos..src_pos + chunk_len].to_vec();
+                    test_input.splice(insert_pos..insert_pos, chunk);
                 }
             } else {
                 // 25% chance to insert constant bytes
                 let constant_byte = rng.gen(); // Generate a random constant byte
                 let chunk = vec![constant_byte; chunk_len];
-                result.splice(insert_pos..insert_pos, chunk);
+                test_input.splice(insert_pos..insert_pos, chunk);
             }
         }
+    }
 
+    /// Mutate a test case
+    fn mutate(&self, test_case: &TestCase) -> Result<Vec<u8>> {
+        // Read the input file
+        debug!("Mutating: {}", test_case.filename);
+        let input = fs::read(self.get_queue_path(&test_case.filename))?;
+        let mut result = input.to_vec();
+        self.havoc(&mut result);
         Ok(result)
     }
 
@@ -518,6 +531,13 @@ impl Fuzzer {
     }
 
     fn fuzz_one(&mut self, test_case: &TestCase) -> Result<()> {
+        for _ in 0..16 {
+            self.fuzz_one_(test_case)?;
+        }
+        Ok(())
+    }
+
+    fn fuzz_one_(&mut self, test_case: &TestCase) -> Result<()> {
         trace!("Fuzzing: {}", test_case.filename);
 
         match self.mutate(&test_case) {
