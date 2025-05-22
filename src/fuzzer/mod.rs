@@ -531,7 +531,7 @@ impl Fuzzer {
     }
 
     fn fuzz_one(&mut self, test_case: &TestCase) -> Result<()> {
-        for _ in 0..16 {
+        for _ in 0..256 {
             self.fuzz_one_(test_case)?;
         }
         Ok(())
