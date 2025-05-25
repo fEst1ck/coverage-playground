@@ -104,6 +104,7 @@ impl PerFunctionPathCoverage {
             } else {
                 if seen_blocks.insert(new_block) {
                     reduced_path.push(new_block);
+                    *path = &path[1..];
                     continue;
                 }
                 if let Some(&last_idx) = loop_stack.get(&new_block) {
