@@ -87,7 +87,7 @@ impl PerFunctionPathCoverage {
         }
         // maps a block to where it last appears in the buffer
         // this local to this function call
-        let mut loop_stack: FxHashMap<BlockID, usize> = FxHashMap::default();
+        let mut loop_stack: FxHashMap<BlockID, Vec<usize>> = FxHashMap::default();
         while !path.is_empty() {
             let new_block = path[0];
             // function call
@@ -99,26 +99,49 @@ impl PerFunctionPathCoverage {
                 *path = &path[1..];
                 if cfg!(test) {
                     println!("reduced path: {:?}", reduced_path);
+                    println!("loop_stack: {:?}", loop_stack);
                 }
                 return self.compute_hash_and_update_cov(&reduced_path);
             } else {
-                if seen_blocks.insert(new_block) {
+                // if seen_blocks.insert(new_block) {
+                //     reduced_path.push(new_block);
+                //     *path = &path[1..];
+                //     continue;
+                // }
+                if !loop_stack.contains_key(&new_block) || loop_stack.get(&new_block).unwrap().is_empty() {
+                    loop_stack.insert(new_block, vec![reduced_path.len()]);
                     reduced_path.push(new_block);
                     *path = &path[1..];
                     continue;
                 }
-                if let Some(&last_idx) = loop_stack.get(&new_block) {
+                let indices = loop_stack.get_mut(&new_block).unwrap();
+                if indices.len() == 1 {
+                    let last_idx = indices[0];
+                    for (block, indices) in loop_stack.iter_mut() {
+                        if *block != new_block {
+                            indices.retain(|&idx| idx < last_idx);
+                        }
+                    }
+                    loop_stack.get_mut(&new_block).unwrap().push(reduced_path.len());
+                    reduced_path.push(new_block);
+                    *path = &path[1..];
+                    continue;
+                } else {
+                    let last_idx = indices[indices.len() - 1];
                     reduced_path.truncate(last_idx);
-                    loop_stack.retain(|_, &mut off| off < last_idx);
+                    for indices in loop_stack.values_mut() {
+                        indices.retain(|&idx| idx <= last_idx);
+                    }
+                    *path = &path[1..];
+                    reduced_path.push(new_block);
+                    continue;
                 }
-                *path = &path[1..];
-                loop_stack.insert(new_block, reduced_path.len());
-                reduced_path.push(new_block);
             }
         }
         warn!("partial path");
         if cfg!(test) {
             println!("reduced path: {:?}", reduced_path);
+            println!("loop_stack: {:?}", loop_stack);
         }
         self.compute_hash_and_update_cov(&reduced_path)
     }
@@ -213,5 +236,41 @@ mod test {
         pfp.first_to_lasts.insert(1, [5].into_iter().collect());
         let path = vec![1, 2, 3, 3, 3, 4, 2, 3, 4, 5];
         pfp.reduce_fun(&mut &path[..]); 
+    }
+
+    #[test]
+    fn test5() {
+        let mut pfp = PerFunctionPathCoverage::empty();
+        // f = 1 (23)* 4
+        pfp.first_to_lasts.insert(1, [4].into_iter().collect());
+        let path = vec![1, 2, 3, 2, 3, 2, 3, 4];
+        pfp.reduce_fun(&mut &path[..]);
+    }
+
+    #[test]
+    fn test6() {
+        let mut pfp = PerFunctionPathCoverage::empty();
+        // f = 1 (23*)* 4
+        pfp.first_to_lasts.insert(1, [4].into_iter().collect());
+        let path = vec![1, 2, 3, 3, 3, 2, 3, 3, 3, 4];
+        pfp.reduce_fun(&mut &path[..]);
+    }
+
+    #[test]
+    fn test7() {
+        let mut pfp = PerFunctionPathCoverage::empty();
+        // f = 1 (23*)* 4
+        pfp.first_to_lasts.insert(1, [4].into_iter().collect());
+        let path = vec![1, 2, 3, 3, 3, 2, 3, 3, 3, 2, 3, 3, 3, 3, 4];
+        pfp.reduce_fun(&mut &path[..]);
+    }
+
+    #[test]
+    fn test8() {
+        let mut pfp = PerFunctionPathCoverage::empty();
+        // f = 1 (23*)* 4
+        pfp.first_to_lasts.insert(1, [5].into_iter().collect());
+        let path = vec![1, 3, 2, 2, 3, 4, 3, 5];
+        pfp.reduce_fun(&mut &path[..]);
     }
 }
