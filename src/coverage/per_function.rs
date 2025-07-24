@@ -1,4 +1,4 @@
-use super::{edge, BlockCoverage, CoverageFeedback, CoverageMetric, EdgeCoverage};
+use super::{BlockCoverage, CoverageFeedback, CoverageMetric, EdgeCoverage};
 use log::{info, warn};
 use md5::{compute, Digest};
 use path_reduction::json_parser::parse_json_file;
@@ -69,7 +69,6 @@ impl PerFunctionPathCoverage {
         if cfg!(test) {
             println!("unreduced path: {:?}", path);
         }
-        let mut seen_blocks: FxHashSet<BlockID> = FxHashSet::default();
         let mut new_cov = false;
         let first = if let Some(&first) = path.first() {
             first
@@ -200,8 +199,6 @@ impl CoverageMetric for PerFunctionPathCoverage {
 }
 
 mod test {
-    use super::PerFunctionPathCoverage;
-
     #[test]
     fn test1() {
         let mut pfp = PerFunctionPathCoverage::empty();

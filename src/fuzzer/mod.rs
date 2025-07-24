@@ -426,7 +426,7 @@ impl Fuzzer {
 
         self.update_status_screen();
         self.log_fuzzing_progress()?;
-        self.write_coverage_graph()?;
+        // self.write_coverage_graph()?;
 
         let cov_feedback = self.coverage.update_from_path(&path);
 
@@ -782,6 +782,7 @@ impl Fuzzer {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn write_coverage_graph(&mut self) -> Result<()> {
         if self.stats.should_write_graph() {
             // self._write_coverage_graph()?;
