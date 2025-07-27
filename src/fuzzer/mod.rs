@@ -201,7 +201,7 @@ impl Fuzzer {
 
     /// Create a shared memory for path coverage instrumentation
     fn create_coverage_shm(id: usize) -> Result<memmap2::MmapMut> {
-        let shm_path = format!("{}_{}.bin", COVERAGE_SHM_BASE, id);
+        let shm_path = format!("{}.bin", COVERAGE_SHM_BASE);
         let file = OpenOptions::new()
             .read(true)
             .write(true)
