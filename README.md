@@ -1,8 +1,8 @@
-# Dummy Fuzzer
+# Coverage Playground
 
 A simple coverage-guided fuzzer designed for comparing different coverage metrics: block coverage, edge coverage, and path coverage. Our fuzzer can track all three coverages at the same time, and uses one of them to guide the fuzzing process. Our goal is to compare the effectiveness of different coverage metrics, and so performance of the fuzzer is not our concern.
 
-The fuzzer should be used with programs instrumented with https://github.com/fEst1ck/path-cov-instr, which tracks the execution paths of a program.
+The fuzzer should be used with programs instrumented with [path-cov-instr](https://github.com/fEst1ck/path-cov-instr), which tracks the execution paths of a program. See [here](https://github.com/fEst1ck/coverage-playground-playground) for an example setup.
 
 ## Build
 
