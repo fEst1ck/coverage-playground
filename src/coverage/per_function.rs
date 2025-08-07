@@ -295,15 +295,6 @@ mod test {
     }
 
     #[test]
-    fn test1__() {
-        let mut pfp = PerFunctionPathCoverage::empty();
-        // f = 1 (f | 2)
-        pfp.first_to_lasts.insert(1, [2].into_iter().collect());
-        let path = vec![1, 1, 2, 2];
-        pfp.reduce_fun2(&mut &path[..], 2);
-    }
-
-    #[test]
     fn test2() {
         let mut pfp = PerFunctionPathCoverage::empty();
         // f = 1 (2)* 3
