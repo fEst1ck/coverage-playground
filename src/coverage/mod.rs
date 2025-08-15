@@ -6,9 +6,10 @@
 mod block;
 mod edge;
 mod path;
+mod quad;
 mod per_function;
 mod raw_path;
-use std::{any::Any, cmp::Ordering, collections::BTreeMap};
+use std::{any::Any, cmp::Ordering, collections::BTreeMap, u128};
 
 pub use block::BlockCoverage;
 use cached::proc_macro::cached;
@@ -18,12 +19,17 @@ use per_function::PerFunctionPathCoverage;
 use raw_path::RawPathCoverage;
 use serde_json::Value;
 
+use crate::coverage::quad::QuadCoverage;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoverageFeedback {
     NewBlock {
         uniqueness: usize,
     },
     NewEdge {
+        uniqueness: usize,
+    },
+    NewQuad {
         uniqueness: usize,
     },
     NewPath {
@@ -54,6 +60,7 @@ impl CoverageFeedback {
         match self {
             CoverageFeedback::NewBlock { uniqueness } => format!("block_{}", uniqueness),
             CoverageFeedback::NewEdge { uniqueness } => format!("edge_{}", uniqueness),
+            CoverageFeedback::NewQuad { uniqueness } => format!("quad_{}", uniqueness),
             CoverageFeedback::NewPath { uniqueness } => format!("path_{}", uniqueness),
             CoverageFeedback::NoCoverage(cov) => format!("nocov_{}", cov),
             _ => unreachable!(),
@@ -79,8 +86,9 @@ impl CoverageFeedback {
 
     fn priority(&self) -> usize {
         match self {
-            CoverageFeedback::NewBlock { .. } => 5,
-            CoverageFeedback::NewEdge { .. } => 4,
+            CoverageFeedback::NewBlock { .. } => 6,
+            CoverageFeedback::NewEdge { .. } => 5,
+            CoverageFeedback::NewQuad { .. } => 4,
             CoverageFeedback::NewPath { .. } => 3,
             CoverageFeedback::NoCoverage(_) => 2,
             CoverageFeedback::Old(_) => 1,
@@ -98,6 +106,10 @@ impl PartialOrd for CoverageFeedback {
             (
                 CoverageFeedback::NewEdge { uniqueness: u1 },
                 CoverageFeedback::NewEdge { uniqueness: u2 },
+            ) => Some(u2.cmp(u1)),
+            (
+                CoverageFeedback::NewQuad { uniqueness: u1 },
+                CoverageFeedback::NewQuad { uniqueness: u2 },
             ) => Some(u2.cmp(u1)),
             (
                 CoverageFeedback::NewPath {
@@ -128,6 +140,7 @@ impl CoverageFeedback {
             self,
             CoverageFeedback::NewBlock { .. }
                 | CoverageFeedback::NewEdge { .. }
+                | CoverageFeedback::NewQuad { .. }
                 | CoverageFeedback::NewPath { .. }
         )
     }
@@ -160,6 +173,7 @@ pub fn get_coverage_metric_by_name(name: &str) -> Option<Box<dyn CoverageMetric>
     match name {
         "block" => Some(Box::new(BlockCoverage::default())),
         "edge" => Some(Box::new(EdgeCoverage::default())),
+        "quad" => Some(Box::new(QuadCoverage::default())),
         "path" => Some(Box::new(PathCoverage::default())),
         "pfp" => Some(Box::new(PerFunctionPathCoverage::default())),
         "rawpath" => Some(Box::new(RawPathCoverage::default())),
