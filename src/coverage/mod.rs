@@ -77,6 +77,7 @@ impl CoverageFeedback {
         let cov = match cov_type {
             "block" => CoverageFeedback::NewBlock { uniqueness },
             "edge" => CoverageFeedback::NewEdge { uniqueness },
+            "quad" => CoverageFeedback::NewQuad { uniqueness },
             "path" => CoverageFeedback::NewPath { uniqueness },
             "nocov" => CoverageFeedback::NoCoverage(uniqueness),
             _ => unreachable!(),
