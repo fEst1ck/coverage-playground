@@ -78,22 +78,6 @@ impl CoverageMetric for QuadCoverage {
         Value::Number(self.edges.len().into())
     }
 
-    // an array of [from, to, count]
-    fn full_cov(&self) -> Value {
-        Value::Array(
-            self.edges
-                .iter()
-                .map(|(edge, count)| {
-                    Value::Array(vec![
-                        Value::Number((edge.0).into()),
-                        Value::Number((edge.1).into()),
-                        Value::Number((*count).into()),
-                    ])
-                })
-                .collect(),
-        )
-    }
-
     fn name(&self) -> &'static str {
         "quad"
     }
