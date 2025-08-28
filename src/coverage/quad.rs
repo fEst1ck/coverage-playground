@@ -12,12 +12,6 @@ pub struct QuadCoverage {
 
 impl CoverageMetric for QuadCoverage {
     fn update_from_path(&mut self, path: &[u32]) -> CoverageFeedback {
-        let mut n = path.len();
-        let mut logs = vec![];
-        while n >= 4 {
-            logs.push(n / 2);
-            n /= 2;
-        }
         let raw_edge_feedback = self.raw_edge.update_from_path(path);
 
         let mut new_coverage = false;
@@ -25,17 +19,15 @@ impl CoverageMetric for QuadCoverage {
         let mut uniq = usize::MAX;
 
         for (i, block) in path.iter().enumerate() {
-            for &distance in &logs {
-                let j = i + distance;
-                if j < path.len() {
-                    let succ = path[j];
-                    let edge = (*block, succ);
-                    let count = *self.edges.entry(edge).and_modify(|count| *count += 1).or_insert_with(|| {
-                    new_coverage = true;
-                    1
+            let j = i + path.len() / 2;
+            if j < path.len() {
+                let succ = path[j];
+                let edge = (*block, succ);
+                let count = *self.edges.entry(edge).and_modify(|count| *count += 1).or_insert_with(|| {
+                new_coverage = true;
+                1
                 });
                 uniq = uniq.min(count);
-                }
             }
         }
 
