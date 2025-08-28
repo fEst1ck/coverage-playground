@@ -19,16 +19,14 @@ impl CoverageMetric for QuadCoverage {
         let mut uniq = usize::MAX;
 
         for (i, block) in path.iter().enumerate() {
-            let j = i + path.len() / 2;
-            if j < path.len() {
-                let succ = path[j];
-                let edge = (*block, succ);
-                let count = *self.edges.entry(edge).and_modify(|count| *count += 1).or_insert_with(|| {
-                new_coverage = true;
-                1
-                });
-                uniq = uniq.min(count);
-            }
+            let j = (i + path.len() - 1) / 2;
+            let succ = path[j];
+            let edge = (*block, succ);
+            let count = *self.edges.entry(edge).and_modify(|count| *count += 1).or_insert_with(|| {
+            new_coverage = true;
+            1
+            });
+            uniq = uniq.min(count);
         }
 
         if raw_edge_feedback.new_cov() {
