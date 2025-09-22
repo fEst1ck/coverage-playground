@@ -62,10 +62,8 @@ impl Args {
     pub fn get_instance_coverage_types(&self, instance_id: usize) -> Vec<String> {
         self.instance_coverage
             .get(instance_id)
-            .expect(&format!(
-                "no instance coverage for instance {}",
-                instance_id
-            ))
+            .unwrap_or_else(|| panic!("no instance coverage for instance {}",
+                instance_id))
             .split(',')
             .map(|s| s.to_string())
             .collect()

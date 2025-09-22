@@ -143,7 +143,7 @@ impl Fuzzer {
         let input_marker_count = args
             .target_cmd
             .iter()
-            .filter(|arg| arg.to_str().map_or(false, |s| s == "@@"))
+            .filter(|arg| arg.to_str() == Some("@@"))
             .count();
         if input_marker_count > 1 {
             return Err(FuzzerError::Configuration(
@@ -176,7 +176,7 @@ impl Fuzzer {
             .iter()
             .map(|t| {
                 get_coverage_metric_by_name(t)
-                    .expect(format!("Invalid metric '{}' not found", t).as_str())
+                    .unwrap_or_else(|| panic!("Invalid metric '{}' not found", t))
             })
             .collect();
 
@@ -410,7 +410,7 @@ impl Fuzzer {
                     // detect crashes
                     11 | 6 | 7 => {
                         // deduplicate crashes by program counter
-                        if self.exit_blocks.insert(path.last().unwrap().clone()) {
+                        if self.exit_blocks.insert(*path.last().unwrap()) {
                             // Save crash
                             self.save_crash(input, signal)?;
                             self.stats.crash_count += 1;
@@ -456,7 +456,7 @@ impl Fuzzer {
     fn mutate_data(&self, test_input: &mut Vec<u8>) {
         let mut rng = rand::thread_rng();
 
-        if test_input.len() == 0 {
+        if test_input.is_empty() {
             return;
         }
 
@@ -540,7 +540,7 @@ impl Fuzzer {
     fn fuzz_one_(&mut self, test_case: &TestCase) -> Result<()> {
         trace!("Fuzzing: {}", test_case.filename);
 
-        match self.mutate(&test_case) {
+        match self.mutate(test_case) {
             Ok(mutated) => match self.run_and_get_coverage(&mutated) {
                 Ok((_path, cov_feedback)) => {
                     let cov = self.summarize_coverage(&cov_feedback);
@@ -774,7 +774,7 @@ impl Fuzzer {
         let edge_counts = full_cov.get("edge").unwrap();
         let fun_coverage = analyzer.analyze_fun_coverage(block_counts, edge_counts);
         let json = fun_coverage.to_json();
-        let mut file = File::create(&self.stats_dir.join(format!(
+        let mut file = File::create(self.stats_dir.join(format!(
             "fun_coverage_{}.json",
             self.stats.start_time.unwrap().elapsed().as_secs()
         )))?;

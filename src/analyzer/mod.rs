@@ -49,6 +49,7 @@ impl Default for ControlFlowGraphInfo {
 }
 
 /// Analyzer for the coverage information
+#[derive(Default)]
 pub struct Analyzer {
     control_flow_graph_info: ControlFlowGraphInfo,
 }
@@ -119,7 +120,7 @@ impl Analyzer {
         // hyper edges
         let hyper_edges = self.analyze_hyper_edge(block_coverage, edge_coverage);
         for (pred, succs) in &hyper_edges {
-            let fun_id = self.control_flow_graph_info.block_id_to_fun_id[&pred];
+            let fun_id = self.control_flow_graph_info.block_id_to_fun_id[pred];
             fun_coverage.coverage.get_mut(&fun_id).unwrap().hyper_edges.extend(succs.iter().map(|succ| (*pred, *succ)));
         }
 
@@ -164,13 +165,6 @@ impl Analyzer {
     }
 }
 
-impl Default for Analyzer {
-    fn default() -> Self {
-        Self {
-            control_flow_graph_info: ControlFlowGraphInfo::default(),
-        }
-    }
-}
 
 /// Coverage information of each function
 struct EachFunctionCoverage {
@@ -233,7 +227,7 @@ impl FunctionCoverage {
 
     pub fn to_json(&self) -> Value {
         let mut vec = Vec::new();
-        for (_fun_id, coverage) in &self.coverage {
+        for coverage in self.coverage.values() {
             vec.push(coverage.to_json());
         }
         Value::Array(vec)

@@ -3,17 +3,11 @@ use md5::{compute, Digest};
 use rustc_hash::FxHashSet;
 use serde_json::Value;
 
+#[derive(Default)]
 pub struct RawPathCoverage {
     paths: FxHashSet<Digest>,
 }
 
-impl Default for RawPathCoverage {
-    fn default() -> Self {
-        Self {
-            paths: FxHashSet::default(),
-        }
-    }
-}
 
 impl CoverageMetric for RawPathCoverage {
     fn update_from_path(&mut self, path: &[u32]) -> CoverageFeedback {

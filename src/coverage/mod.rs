@@ -9,7 +9,7 @@ mod path;
 mod quad;
 mod per_function;
 mod raw_path;
-use std::{any::Any, cmp::Ordering, collections::BTreeMap, u128};
+use std::{cmp::Ordering, collections::BTreeMap};
 
 pub use block::BlockCoverage;
 use cached::proc_macro::cached;

@@ -55,7 +55,7 @@ impl PerFunctionPathCoverage {
         let res = self
             .coverage
             .entry(path[0])
-            .or_insert_with(FxHashSet::default)
+            .or_default()
             .insert(path_hash);
         if res {
             self.total_cov += 1;
@@ -87,7 +87,7 @@ impl PerFunctionPathCoverage {
         let lasts = &self
             .first_to_lasts
             .get(&first)
-            .expect(&format!("no entry for first block {}", first))
+            .unwrap_or_else(|| panic!("no entry for first block {}", first))
             .clone();
         // handles the case where the function is a single block
         if lasts.contains(&first) {
@@ -108,22 +108,20 @@ impl PerFunctionPathCoverage {
                     println!("loop_stack: {:?}", loop_stack);
                 }
                 return self.compute_hash_and_update_cov(&reduced_path);
-            } else {
-                if let Some((times, last_idx)) = loop_stack.get(&new_block).cloned() {
-                    loop_stack.retain(|&_block, (_times, last_idx_)| *last_idx_ <= last_idx);
-                    if times < k {
-                        loop_stack.insert(new_block, (times + 1, reduced_path.len()));
-                        reduced_path.push(new_block);
-                        *path = &path[1..];
-                    } else {
-                        reduced_path.truncate(last_idx + 1);
-                        *path = &path[1..];
-                    }
-                } else {
-                    loop_stack.insert(new_block, (1, reduced_path.len()));
+            } else if let Some((times, last_idx)) = loop_stack.get(&new_block).cloned() {
+                loop_stack.retain(|&_block, (_times, last_idx_)| *last_idx_ <= last_idx);
+                if times < k {
+                    loop_stack.insert(new_block, (times + 1, reduced_path.len()));
                     reduced_path.push(new_block);
                     *path = &path[1..];
+                } else {
+                    reduced_path.truncate(last_idx + 1);
+                    *path = &path[1..];
                 }
+            } else {
+                loop_stack.insert(new_block, (1, reduced_path.len()));
+                reduced_path.push(new_block);
+                *path = &path[1..];
             }
         }
         warn!("partial path");
@@ -155,8 +153,8 @@ impl Default for PerFunctionPathCoverage {
 
 impl CoverageMetric for PerFunctionPathCoverage {
     fn update_from_path(&mut self, mut path: &[u32]) -> CoverageFeedback {
-        let block_feedback = self.block_cov.update_from_path(&path);
-        let edge_feedback = self.edge_cov.update_from_path(&path);
+        let block_feedback = self.block_cov.update_from_path(path);
+        let edge_feedback = self.edge_cov.update_from_path(path);
         let mut new_cov = false;
         while !path.is_empty() {
             new_cov = self.reduce_fun(&mut path) || new_cov;
@@ -188,7 +186,7 @@ impl CoverageMetric for PerFunctionPathCoverage {
 }
 
 mod test {
-    use super::PerFunctionPathCoverage;
+    
 
     #[test]
     fn test1() {

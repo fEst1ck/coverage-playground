@@ -3,7 +3,6 @@ use dummy_fuzzer::{
     cli::Args,
     fuzzer::{parallel::ParallelFuzzer, Fuzzer},
 };
-use env_logger;
 use log::{error, info};
 use std::process;
 
