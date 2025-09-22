@@ -51,9 +51,6 @@ impl CoverageMetric for QuadCoverage {
         let mut prev_blocks: FxHashSet<u32> = FxHashSet::default();
 
         for block in path {
-            if !self.first_to_lasts.contains_key(block) {
-                continue;
-            }
             for prev_block in &prev_blocks {
                 let edge = (*prev_block, *block);
                 let count = *self.edges.entry(edge).and_modify(|count| *count += 1).or_insert_with(|| {
