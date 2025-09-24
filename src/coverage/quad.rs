@@ -4,32 +4,22 @@ use super::{CoverageFeedback, CoverageMetric};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::Value;
 
-use path_reduction::json_parser::parse_json_file;
+use path_reduction::{json_parser::parse_json_file, path_reduction::PathReducer};
 
 type BlockID = u32;
 
 pub struct QuadCoverage {
     edges: FxHashMap<(u32, u32), usize>,
     raw_edge: EdgeCoverage,
-    first_to_lasts: FxHashMap<BlockID, FxHashSet<BlockID>>,
+    path_reducer: PathReducer<u32, u32>,
 }
 
 impl QuadCoverage {
     pub fn from_json(path: &str) -> Self {
-        let modules = parse_json_file(path).unwrap();
-        let first_to_lasts = modules
-            .iter()
-            .flat_map(|module| {
-                module
-                    .functions
-                    .iter()
-                    .map(|func| (func.entry_block, func.exit_blocks.iter().cloned().collect()))
-            })
-            .collect();
         Self {
             edges: Default::default(),
             raw_edge: EdgeCoverage::default(),
-            first_to_lasts,
+            path_reducer: PathReducer::from_json(path),
         }
     }
 }
@@ -43,23 +33,24 @@ impl Default for QuadCoverage {
 
 impl CoverageMetric for QuadCoverage {
     fn update_from_path(&mut self, path: &[u32]) -> CoverageFeedback {
-        let raw_edge_feedback = self.raw_edge.update_from_path(path);
+        let reduced_path = self.path_reducer.simple_reduce(path);
+        let raw_edge_feedback = self.raw_edge.update_from_path(&reduced_path);
 
         let mut new_coverage = false;
 
         let mut uniq = usize::MAX;
         let mut prev_blocks: FxHashSet<u32> = FxHashSet::default();
 
-        for block in path {
+        for block in reduced_path {
             for prev_block in &prev_blocks {
-                let edge = (*prev_block, *block);
+                let edge = (*prev_block, block);
                 let count = *self.edges.entry(edge).and_modify(|count| *count += 1).or_insert_with(|| {
                     new_coverage = true;
                     1
                 });
                 uniq = uniq.min(count);
             }
-            prev_blocks.insert(*block);
+            prev_blocks.insert(block);
         }
 
         if raw_edge_feedback.new_cov() {
