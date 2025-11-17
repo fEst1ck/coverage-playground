@@ -84,11 +84,14 @@ impl PerFunctionPathCoverage {
         info!("reducing fun starting with {}", first);
         *path = &path[1..];
         reduced_path.push(first);
-        let lasts = &self
+        let lasts = if let Some(lasts) = self
             .first_to_lasts
-            .get(&first)
-            .unwrap_or_else(|| panic!("no entry for first block {}", first))
-            .clone();
+            .get(&first) {
+                lasts.clone()
+            } else {
+                warn!("function entry block {} not found in CFG", first);
+                return self.reduce_fun1(path, k);
+            };
         // handles the case where the function is a single block
         if lasts.contains(&first) {
             return self.compute_hash_and_update_cov(&reduced_path);
