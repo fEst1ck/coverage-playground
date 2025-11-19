@@ -90,7 +90,7 @@ impl PerFunctionPathCoverage {
                 lasts.clone()
             } else {
                 warn!("function entry block {} not found in CFG", first);
-                return self.reduce_fun1(path, k);
+                return false;
             };
         // handles the case where the function is a single block
         if lasts.contains(&first) {
