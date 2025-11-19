@@ -410,7 +410,7 @@ impl Fuzzer {
                     // detect crashes
                     11 | 6 | 7 => {
                         // deduplicate crashes by program counter
-                        if self.exit_blocks.insert(*path.last().unwrap()) {
+                        if self.exit_blocks.insert(*path.last().unwrap_or(&0)) {
                             // Save crash
                             self.save_crash(input, signal)?;
                             self.stats.crash_count += 1;
