@@ -270,8 +270,8 @@ impl Fuzzer {
 
     /// Run the fuzzer
     pub fn run(&mut self) -> Result<()> {
-        self.load_initial_seeds()
-        // self.fuzz_loop()
+        self.load_initial_seeds()?;
+        self.fuzz_loop()
     }
 
     /// Get the path of the file in the queue directory
@@ -353,7 +353,6 @@ impl Fuzzer {
             error!("Coverage file is too short to clear execution path");
         }
 
-        let start = Instant::now();
         // Run the target
         let mut child = match cmd.spawn() {
             Ok(child) => child,
@@ -372,9 +371,6 @@ impl Fuzzer {
 
         // Wait for completion
         let output = child.wait_with_output()?;
-
-        let elapsed = start.elapsed();
-        println!("fuzzer: {:?}", elapsed);
 
         // Print the command output
         if !output.stdout.is_empty() {
