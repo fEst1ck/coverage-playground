@@ -4,7 +4,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 fn validate_coverage_type(s: &str) -> Result<String, String> {
     match s {
-        "block" | "edge" | "quad" | "path" | "pfp" | "rawpath" => Ok(s.to_string()),
+        "block" | "edge" | "quad" | "path" | "pfp" | "rawpath" | "fun" => Ok(s.to_string()),
         _ => Err(format!("Invalid coverage type: {}", s)),
     }
 }
