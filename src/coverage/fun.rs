@@ -1,11 +1,12 @@
 use super::{CoverageFeedback, CoverageMetric};
 use path_reduction::json_parser::parse_json_file;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::Value;
 
+type BlockID = u32;
 pub struct FunCoverage {
     funs: FxHashMap<u32, usize>,
-    first_map: FxHashMap<u32, u32>,
+    first_map: FxHashSet<BlockID>,
 }
 
 impl Default for FunCoverage {
@@ -24,7 +25,7 @@ impl FunCoverage {
                 module
                     .functions
                     .iter()
-                    .map(|func| (func.entry_block, func.exit_blocks.iter().cloned().collect()))
+                    .map(|func| func.entry_block)
             })
             .collect();
         Self {
@@ -39,7 +40,7 @@ impl CoverageMetric for FunCoverage {
         let mut new_cov = false;
         let mut uniq = usize::MAX;
         for block in path {
-            if self.first_map.contains_key(block) {
+            if self.first_map.contains(block) {
                 let count = *self
                     .funs
                     .entry(*block)
