@@ -8,6 +8,7 @@ mod edge;
 mod path;
 mod quad;
 mod per_function;
+mod fun;
 mod raw_path;
 use std::{cmp::Ordering, collections::BTreeMap};
 
@@ -178,6 +179,7 @@ pub fn get_coverage_metric_by_name(name: &str) -> Option<Box<dyn CoverageMetric>
         "path" => Some(Box::new(PathCoverage::default())),
         "pfp" => Some(Box::new(PerFunctionPathCoverage::default())),
         "rawpath" => Some(Box::new(RawPathCoverage::default())),
+        "fun" => Some(Box::new(fun::FunCoverage::default())),
         _ => None,
     }
 }
