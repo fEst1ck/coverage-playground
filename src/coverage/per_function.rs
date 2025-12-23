@@ -1,6 +1,3 @@
-use core::time;
-use std::time::Instant;
-
 use super::{BlockCoverage, CoverageFeedback, CoverageMetric, EdgeCoverage};
 use log::{info, warn};
 use md5::{compute, Digest};
@@ -162,12 +159,9 @@ impl CoverageMetric for PerFunctionPathCoverage {
         let block_feedback = self.block_cov.update_from_path(path);
         let edge_feedback = self.edge_cov.update_from_path(path);
         let mut new_cov = false;
-        let start = Instant::now();
         while !path.is_empty() {
             new_cov = self.reduce_fun(&mut path) || new_cov;
         }
-        let elapsed = start.elapsed();
-        println!("pfp: {:?}", elapsed);
         if block_feedback.new_cov() {
             block_feedback
         } else if edge_feedback.new_cov() {

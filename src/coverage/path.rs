@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use super::{CoverageFeedback, CoverageMetric};
 use crate::coverage::block::BlockCoverage;
 use crate::coverage::edge::EdgeCoverage;
@@ -31,18 +29,7 @@ impl Default for PathCoverage {
 
 impl CoverageMetric for PathCoverage {
     fn update_from_path(&mut self, path: &[u32]) -> CoverageFeedback {
-        let start = Instant::now();
         let reduced_path = self.path_reduction.simple_reduce(path);
-        let elapsed = start.elapsed();
-        println!("path: {:?}", elapsed);
-
-        if std::env::var("DEBUG").unwrap_or_default() == "1" {
-            eprintln!(
-                "Path len: {:?}\nreduced path len: {:?}",
-                path.len(),
-                reduced_path.len()
-            );
-        }
 
         // Convert Vec<u32> to bytes
         let bytes: Vec<u8> = reduced_path
