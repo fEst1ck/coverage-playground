@@ -5,6 +5,7 @@
 
 mod block;
 mod edge;
+mod ngram;
 mod path;
 mod quad;
 mod per_function;
@@ -20,7 +21,7 @@ use per_function::PerFunctionPathCoverage;
 use raw_path::RawPathCoverage;
 use serde_json::Value;
 
-use crate::coverage::quad::QuadCoverage;
+use crate::coverage::{ngram::NGramCoverage, quad::QuadCoverage};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoverageFeedback {
@@ -175,6 +176,7 @@ pub fn get_coverage_metric_by_name(name: &str) -> Option<Box<dyn CoverageMetric>
     match name {
         "block" => Some(Box::new(BlockCoverage::default())),
         "edge" => Some(Box::new(EdgeCoverage::default())),
+        "ngram" => Some(Box::new(NGramCoverage::default())),
         "quad" => Some(Box::new(QuadCoverage::default())),
         "path" => Some(Box::new(PathCoverage::default())),
         "pfp" => Some(Box::new(PerFunctionPathCoverage::default())),
